@@ -2,7 +2,7 @@ import "server-only";
 
 /** PostgREST embed for seller row (must match FK name on `listings.seller_id` → `users.id`). */
 export const LISTING_SELLER_EMBED =
-  "users!fk_listings_seller(id,display_name,avatar_url,trust_badge,ine_verified,rfc_verified,phone_verified,whatsapp_optin,created_at)";
+  "users!fk_listings_seller(id,display_name,avatar_url,trust_badge,dl_verified,ein_verified,ine_verified,rfc_verified,phone_verified,whatsapp_optin,created_at)";
 
 /**
  * Load one listing for `/listing/[id]`.

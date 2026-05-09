@@ -47,13 +47,16 @@ const T = {
     step4:        "Confirmar",
     name:         "Nombre completo",
     whatsapp:     "WhatsApp (con código de país)",
-    whatsappPh:   "+52 415 000 0000",
-    curp:         "CURP (opcional)",
-    curpPh:       "Ej. GAMA850101HDFRRL09",
-    curpHelp:     "Tu CURP nos ayuda a verificar tu identidad. Aparecerás como proveedor verificado.",
-    rfc:          "RFC (opcional)",
-    rfcPh:        "Ej. XAXX010101000 o ABCD850101XXX",
-    rfcHelp:      "Si facturas o eres persona moral, tu RFC ayuda al equipo a validar tu perfil (revisión manual).",
+    whatsappPh:   "+1 732 555 0100",
+    providerType: "Ofrezco servicios como",
+    individual:   "Persona física (licencia de conducir)",
+    business:     "Negocio registrado (EIN)",
+    dl:           "Número de licencia de conducir (opcional)",
+    dlPh:         "Como aparece en tu licencia de NJ / EE. UU.",
+    dlHelp:       "Ayuda a verificar proveedores individuales. También puedes subir una foto de tu licencia desde tu perfil después del registro.",
+    einLabel:     "Número EIN del negocio (opcional)",
+    einPh:        "9 dígitos, ej. 12-3456789",
+    einHelp:      "Para LLC, corporaciones u otras entidades registradas ante el IRS. Revisión manual.",
     service:      "¿Qué servicio ofreces?",
     desc:         "Describe tu servicio",
     descPh:       "Experiencia, zona de cobertura, horarios, especialidades...",
@@ -98,13 +101,16 @@ const T = {
     step4:        "Confirm",
     name:         "Full name",
     whatsapp:     "WhatsApp (with country code)",
-    whatsappPh:   "+52 415 000 0000",
-    curp:         "CURP (optional)",
-    curpPh:       "E.g. GAMA850101HDFRRL09",
-    curpHelp:     "Your CURP helps us verify your identity. You'll appear as a verified provider.",
-    rfc:          "RFC (optional)",
-    rfcPh:        "E.g. XAXX010101000 or ABCD850101XXX",
-    rfcHelp:      "If you invoice or are a business, your RFC helps our team validate your profile (manual review).",
+    whatsappPh:   "+1 732 555 0100",
+    providerType: "I provide services as",
+    individual:   "An individual (driver's license ID)",
+    business:     "A registered business (EIN)",
+    dl:           "Driver license number (optional)",
+    dlPh:         "As on your NJ or US license",
+    dlHelp:       "Helps verify individual providers. You can upload a license photo from your profile after signup.",
+    einLabel:     "Employer Identification Number (EIN) (optional)",
+    einPh:        "9 digits, e.g. 12-3456789",
+    einHelp:      "For US-registered businesses (IRS EIN). Manual review by our team.",
     service:      "What service do you offer?",
     desc:         "Describe your service",
     descPh:       "Experience, coverage area, hours, specialties...",
@@ -152,7 +158,10 @@ export default function UnetePage() {
 
   const [form, setForm] = useState({
     name: "", whatsapp: "", service: "",
-    description: "", price: "", curp: "", rfc: "",
+    description: "", price: "",
+    provider_entity_type: "individual" as "individual" | "business",
+    drivers_license_number: "",
+    ein: "",
     city: "New Jersey",
     colonia: "",
     address: "",
@@ -290,24 +299,53 @@ export default function UnetePage() {
                   {lang === "es" ? "No se mostrará públicamente — solo para coordenadas de búsqueda." : "Not shown publicly — used only for search location."}
                 </p>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#6B7280] mb-2">{t.curp}</label>
-                <input value={form.curp ?? ""} onChange={e => set("curp", e.target.value.toUpperCase())}
-                  className="w-full border border-[#E5E0D8] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#1B4332] transition-colors font-mono tracking-wide"
-                  placeholder={t.curpPh} maxLength={18} />
-                <p className="text-xs text-[#059669] mt-1 flex items-center gap-1">
-                  🛡️ {t.curpHelp}
-                </p>
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-[#6B7280] mb-2">{t.providerType}</label>
+                <div className="flex flex-col gap-2">
+                  {(["individual", "business"] as const).map((k) => (
+                    <label
+                      key={k}
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                        form.provider_entity_type === k ? "border-[#1B4332] bg-[#ECFDF5]" : "border-[#E5E0D8]"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="provider_entity_type"
+                        checked={form.provider_entity_type === k}
+                        onChange={() => set("provider_entity_type", k)}
+                        className="mt-1 accent-[#1B4332]"
+                      />
+                      <span className="text-sm">{k === "individual" ? t.individual : t.business}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#6B7280] mb-2">{t.rfc}</label>
-                <input value={form.rfc ?? ""} onChange={e => set("rfc", e.target.value.toUpperCase())}
-                  className="w-full border border-[#E5E0D8] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#1B4332] transition-colors font-mono tracking-wide"
-                  placeholder={t.rfcPh} maxLength={13} />
-                <p className="text-xs text-[#6B7280] mt-1 flex items-center gap-1">
-                  📋 {t.rfcHelp}
-                </p>
-              </div>
+              {form.provider_entity_type === "individual" ? (
+                <div>
+                  <label className="block text-xs font-semibold text-[#6B7280] mb-2">{t.dl}</label>
+                  <input
+                    value={form.drivers_license_number}
+                    onChange={(e) => set("drivers_license_number", e.target.value.toUpperCase())}
+                    className="w-full border border-[#E5E0D8] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#1B4332] transition-colors font-mono tracking-wide"
+                    placeholder={t.dlPh}
+                    maxLength={32}
+                  />
+                  <p className="text-xs text-[#059669] mt-1 flex items-center gap-1">🛡️ {t.dlHelp}</p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-semibold text-[#6B7280] mb-2">{t.einLabel}</label>
+                  <input
+                    value={form.ein}
+                    onChange={(e) => set("ein", e.target.value)}
+                    className="w-full border border-[#E5E0D8] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#1B4332] transition-colors font-mono tracking-wide"
+                    placeholder={t.einPh}
+                    maxLength={16}
+                  />
+                  <p className="text-xs text-[#6B7280] mt-1 flex items-center gap-1">📋 {t.einHelp}</p>
+                </div>
+              )}
               <button onClick={() => setStep(2)}
                 disabled={!form.name || !form.whatsapp || !form.colonia}
                 className="w-full bg-[#1B4332] text-white font-semibold py-3 rounded-xl text-sm disabled:opacity-40 hover:bg-[#2D6A4F] transition-colors">
@@ -452,8 +490,13 @@ export default function UnetePage() {
                   [t.service,  SERVICES.find(s => s.value === form.service)?.[lang] ?? form.service],
                   [t.price,    `$${form.price} USD`],
                   [t.colonia,  COLONIAS_LIST.find(c => c.value === form.colonia)?.[lang] ?? form.colonia],
-                  ...(form.curp ? [[t.curp.replace(" (opcional)", "").replace(" (optional)", ""), form.curp]] : []),
-                  ...(form.rfc ? [[t.rfc.replace(" (opcional)", "").replace(" (optional)", ""), form.rfc]] : []),
+                  [t.providerType, form.provider_entity_type === "individual" ? t.individual : t.business],
+                  ...(form.provider_entity_type === "individual" && form.drivers_license_number
+                    ? [[t.dl.replace(" (optional)", "").replace(" (opcional)", ""), form.drivers_license_number]]
+                    : []),
+                  ...(form.provider_entity_type === "business" && form.ein
+                    ? [[t.einLabel.replace(" (optional)", "").replace(" (opcional)", ""), form.ein]]
+                    : []),
                   [t.payment, form.payment_methods.map(m => {
                     const labels: Record<string, string> = { efectivo: "💵 Efectivo", spei: "🏦 SPEI", oxxo: "🏪 OXXO", mercadopago: "💳 M.Pago", whatsapp: "💬 WhatsApp" };
                     return labels[m] ?? m;

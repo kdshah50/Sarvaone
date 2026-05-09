@@ -61,7 +61,7 @@ export default async function SellerPage({
   const lang = langFromParam(searchParams?.lang);
 
   const sellerRes = await fetch(
-    `${supaUrl}/rest/v1/users?id=eq.${params.id}&select=id,display_name,avatar_url,trust_badge,ine_verified,rfc_verified,phone_verified,created_at`,
+    `${supaUrl}/rest/v1/users?id=eq.${params.id}&select=id,display_name,avatar_url,trust_badge,dl_verified,ein_verified,ine_verified,rfc_verified,phone_verified,created_at`,
     { headers: h, cache: "no-store" }
   );
   const sellerRows = sellerRes.ok ? await sellerRes.json() : [];
@@ -91,6 +91,8 @@ export default async function SellerPage({
       ? Math.round((reviewRows.reduce((s, r) => s + r.rating, 0) / reviewCount) * 10) / 10
       : 0;
 
+  const idOk = Boolean(seller.dl_verified || seller.ine_verified);
+  const bizOk = Boolean(seller.ein_verified || seller.rfc_verified);
   const memberSince = new Date(seller.created_at).getFullYear();
   const initials = (seller.display_name ?? "V").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
 
@@ -115,8 +117,8 @@ export default async function SellerPage({
             </div>
             <div className="flex gap-4 text-xs text-[#6B7280]">
               <span className={seller.phone_verified ? "text-[#059669]" : ""}>{seller.phone_verified ? "+" : "o"} Telefono</span>
-              <span className={seller.ine_verified ? "text-[#059669]" : ""}>{seller.ine_verified ? "+" : "o"} INE</span>
-              <span className={seller.rfc_verified ? "text-[#059669]" : ""}>{seller.rfc_verified ? "+" : "o"} RFC</span>
+              <span className={idOk ? "text-[#059669]" : ""}>{idOk ? "+" : "o"} DL / ID</span>
+              <span className={bizOk ? "text-[#059669]" : ""}>{bizOk ? "+" : "o"} EIN</span>
             </div>
             <div className="flex gap-3 w-full mt-2">
               <StatCard value={listings.length} label="Activos" />

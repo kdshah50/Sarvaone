@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceRoleRestHeaders, getSupabaseUrl } from "@/lib/service-rest";
 import { COLONIAS } from "@/lib/colonias";
-import { normalizeCurpForStorage, normalizeRfcForStorage } from "@/lib/mx-tax-ids";
+import {
+  normalizeDriversLicenseForStorage,
+  normalizeEinForStorage,
+} from "@/lib/nj-provider-ids";
 
 const ADMIN_WHATSAPP = process.env.ADMIN_WHATSAPP_NUMBER ?? "";
 const TWILIO_SID     = process.env.TWILIO_ACCOUNT_SID ?? "";
@@ -18,8 +21,12 @@ async function notifyAdmin(form: any) {
       `🔧 ${form.service_label}`,
       `💰 ~$${form.price} USD`,
       `📍 ${form.colonia ? (COLONIAS[form.colonia]?.label_en ?? form.colonia) : form.city}, NJ`,
-      ...(form.curp ? [`🪪 CURP: ${form.curp}`] : []),
-      ...(form.rfc ? [`📋 RFC: ${form.rfc}`] : []),
+      ...(form.provider_entity_type === "business" && form.ein_normalized
+        ? [`🏢 EIN: ${form.ein_normalized}`]
+        : []),
+      ...(form.provider_entity_type === "individual" && form.dl_norm
+        ? [`🪪 DL (on file): ${form.dl_norm}`]
+        : []),
       ``,
       `"${(form.description ?? "").slice(0, 120)}..."`,
       ``,
@@ -59,7 +66,7 @@ export async function POST(req: NextRequest) {
       name, whatsapp, service, service_label,
       description, price, city, colonia, address, lang,
       accepted_terms, accepted_pricing, accepted_at,
-      curp, rfc, payment_methods,
+      provider_entity_type, drivers_license_number, ein, payment_methods,
     } = body;
 
     // Validate required fields
@@ -85,14 +92,18 @@ export async function POST(req: NextRequest) {
     const existingUsers = userRes.ok ? await userRes.json() : [];
     let sellerId: string;
 
-    const cleanCurp = normalizeCurpForStorage(String(curp ?? ""));
-    const cleanRfc = normalizeRfcForStorage(String(rfc ?? ""));
+    const petRaw = String(provider_entity_type ?? "individual").toLowerCase();
+    const providerType = petRaw === "business" ? "business" : "individual";
+    const cleanDl = normalizeDriversLicenseForStorage(String(drivers_license_number ?? ""));
+    const cleanEin = normalizeEinForStorage(String(ein ?? ""));
 
     if (existingUsers.length > 0) {
       sellerId = existingUsers[0].id;
-      const patch: Record<string, string> = {};
-      if (cleanCurp) patch.curp = cleanCurp;
-      if (cleanRfc) patch.rfc = cleanRfc;
+      const patch: Record<string, unknown> = {
+        provider_entity_type: providerType,
+      };
+      if (providerType === "individual" && cleanDl) patch.drivers_license_number = cleanDl;
+      if (providerType === "business" && cleanEin) patch.ein = cleanEin;
       if (Object.keys(patch).length > 0) {
         await fetch(`${SUPA_URL}/rest/v1/users?id=eq.${sellerId}`, {
           method: "PATCH",
@@ -105,9 +116,10 @@ export async function POST(req: NextRequest) {
         phone,
         display_name: name,
         trust_badge: "none",
+        provider_entity_type: providerType,
       };
-      if (cleanCurp) userPayload.curp = cleanCurp;
-      if (cleanRfc) userPayload.rfc = cleanRfc;
+      if (providerType === "individual" && cleanDl) userPayload.drivers_license_number = cleanDl;
+      if (providerType === "business" && cleanEin) userPayload.ein = cleanEin;
 
       const newUserRes = await fetch(`${SUPA_URL}/rest/v1/users`, {
         method: "POST",
@@ -178,7 +190,10 @@ export async function POST(req: NextRequest) {
     notifyAdmin({
       name, whatsapp, service_label,
       price, city, colonia, description,
-      accepted_at, curp: cleanCurp, rfc: cleanRfc,
+      accepted_at,
+      provider_entity_type: providerType,
+      dl_norm: providerType === "individual" ? cleanDl : "",
+      ein_normalized: providerType === "business" ? cleanEin : "",
     }).catch(() => {});
 
     return NextResponse.json({ ok: true });

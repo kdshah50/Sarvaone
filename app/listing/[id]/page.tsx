@@ -191,8 +191,8 @@ export default async function ListingPage({
                   </span>
                   <SellerVerificationBadges
                     trustBadge={sellerTrust.trustBadge}
-                    ineVerified={sellerTrust.ineVerified}
-                    rfcVerified={sellerTrust.rfcVerified}
+                    dlVerified={sellerTrust.dlVerified}
+                    einVerified={sellerTrust.einVerified}
                     phoneVerified={sellerTrust.phoneVerified}
                     platformListingVerified={Boolean(listing.is_verified)}
                     lang={listingLang}

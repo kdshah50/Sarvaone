@@ -9,6 +9,7 @@ import SellerStripePayoutCard from "@/components/SellerStripePayoutCard";
 import { LANG_STORAGE_KEY, readStoredLang, type Lang } from "@/lib/i18n-lang";
 import { listingTitle } from "@/lib/listing-language";
 import { formatUsdCents } from "@/lib/money";
+import { formatEinDisplay } from "@/lib/nj-provider-ids";
 
 type User = {
   id: string;
@@ -16,6 +17,12 @@ type User = {
   display_name: string | null;
   trust_badge: string;
   phone_verified: boolean;
+  provider_entity_type?: string | null;
+  drivers_license_number?: string | null;
+  dl_photo_url?: string | null;
+  dl_verified: boolean;
+  ein?: string | null;
+  ein_verified: boolean;
   ine_verified: boolean;
   rfc_verified: boolean;
   curp: string | null;
@@ -60,8 +67,8 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState("");
   const [saving, setSaving] = useState(false);
   const [lang, setLang] = useState<Lang>("en");
-  const [ineUploading, setIneUploading] = useState(false);
-  const [ineMsg, setIneMsg] = useState("");
+  const [dlUploading, setDlUploading] = useState(false);
+  const [dlMsg, setDlMsg] = useState("");
   const [favorites, setFavorites] = useState<
     {
       listing_id: string;
@@ -178,23 +185,23 @@ export default function ProfilePage() {
     });
   };
 
-  const handleIneUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDlUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setIneUploading(true);
-    setIneMsg("");
+    setDlUploading(true);
+    setDlMsg("");
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/upload-ine", { method: "POST", credentials: "same-origin", body: fd });
+      const res = await fetch("/api/upload-dl", { method: "POST", credentials: "same-origin", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Upload failed");
-      setIneMsg(lang === "es" ? "✓ INE subida correctamente. Revisaremos tu documento." : "✓ INE uploaded. We'll review your document.");
-      if (user) setUser({ ...user, ine_photo_url: data.url });
-    } catch (err: any) {
-      setIneMsg(err.message ?? "Error");
+      setDlMsg(lang === "es" ? "✓ Licencia recibida. El equipo la revisará." : "✓ License uploaded. Our team will review it.");
+      if (user) setUser({ ...user, dl_photo_url: data.url });
+    } catch (err: unknown) {
+      setDlMsg(err instanceof Error ? err.message : "Error");
     } finally {
-      setIneUploading(false);
+      setDlUploading(false);
     }
   };
 
@@ -282,14 +289,14 @@ export default function ProfilePage() {
                     📱 {t.phone} {t.verified}
                   </span>
                 )}
-                {user.ine_verified && (
+                {(user.dl_verified || user.ine_verified) && (
                   <span className="text-xs font-semibold px-3 py-1 rounded-full bg-[#FEF3C7] text-[#92400E]">
-                    🪪 INE {t.verified}
+                    🪪 {lang === "es" ? "Licencia / ID" : "DL / ID"} {t.verified}
                   </span>
                 )}
-                {user.rfc_verified && (
+                {(user.ein_verified || user.rfc_verified) && (
                   <span className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200/80">
-                    📋 RFC {t.verified}
+                    🏢 EIN {t.verified}
                   </span>
                 )}
               </div>
@@ -311,73 +318,81 @@ export default function ProfilePage() {
           ))}
         </div>
 
-        {/* INE Verification */}
+        {/* Driver license / identity (NJ) */}
         <div className="bg-white rounded-3xl border border-[#E5E0D8] p-6 mb-5 shadow-sm">
           <h2 className="font-serif text-lg font-bold text-[#1C1917] mb-3">
-            🪪 {lang === "es" ? "Verificación de identidad" : "Identity verification"}
+            🪪 {lang === "es" ? "Verificación de proveedor (NJ)" : "Provider verification (NJ)"}
           </h2>
 
-          {user.rfc_verified && (
+          {(user.ein_verified || user.rfc_verified) && (
             <div className="bg-indigo-50 border border-indigo-200/80 rounded-xl p-4 text-sm text-indigo-900 font-medium flex items-center gap-2 mb-3">
               ✓{" "}
               {lang === "es"
-                ? "Tu RFC fue revisado por el equipo de AISaravanna"
-                : "Your RFC has been reviewed by the AISaravanna team"}
+                ? "Tu EIN de negocio fue revisado por AISaravanna"
+                : "Your business EIN has been reviewed by AISaravanna"}
             </div>
           )}
 
-          {user.ine_verified ? (
+          {(user.dl_verified || user.ine_verified) ? (
             <div className="bg-[#ECFDF5] rounded-xl p-4 text-sm text-[#065F46] font-medium flex items-center gap-2">
-              ✓ {lang === "es" ? "Tu identidad ha sido verificada" : "Your identity has been verified"}
+              ✓ {lang === "es" ? "Tu identidad (licencia) está verificada" : "Your license / ID is verified"}
             </div>
-          ) : user.ine_photo_url ? (
+          ) : user.dl_photo_url || user.ine_photo_url ? (
             <div className="bg-[#FEF3C7] rounded-xl p-4 text-sm text-[#92400E] font-medium flex items-center gap-2">
-              ⏳ {lang === "es" ? "Tu INE está en revisión. Te notificaremos por WhatsApp." : "Your INE is under review. We'll notify you via WhatsApp."}
+              ⏳{" "}
+              {lang === "es"
+                ? "Tu licencia está en revisión. Te avisaremos por WhatsApp."
+                : "Your license is under review. We will notify you via WhatsApp."}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-[#6B7280] leading-relaxed">
                 {lang === "es"
-                  ? "Sube una foto de tu INE para aparecer como proveedor verificado. Tu documento será revisado por nuestro equipo."
-                  : "Upload a photo of your INE to appear as a verified provider. Your document will be reviewed by our team."}
+                  ? "Sube una foto clara de tu licencia de conducir (EE. UU.). No se muestra públicamente; solo el equipo la usa para verificación."
+                  : "Upload a clear photo of your US driver license. It is not shown publicly; our team uses it for verification only."}
               </p>
               <label className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold cursor-pointer transition-colors ${
-                ineUploading ? "bg-[#E5E0D8] text-[#6B7280]" : "bg-[#1B4332] text-white hover:bg-[#2D6A4F]"
+                dlUploading ? "bg-[#E5E0D8] text-[#6B7280]" : "bg-[#1B4332] text-white hover:bg-[#2D6A4F]"
               }`}>
-                {ineUploading
+                {dlUploading
                   ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> {lang === "es" ? "Subiendo..." : "Uploading..."}</>
-                  : <>📸 {lang === "es" ? "Subir foto de INE" : "Upload INE photo"}</>
+                  : <>📸 {lang === "es" ? "Subir foto de licencia" : "Upload license photo"}</>
                 }
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleIneUpload} className="hidden" disabled={ineUploading} />
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleDlUpload} className="hidden" disabled={dlUploading} />
               </label>
               <p className="text-[11px] text-[#9CA3AF]">
-                {lang === "es" ? "JPEG, PNG o WebP · Máximo 5 MB · Tu foto no se muestra públicamente" : "JPEG, PNG, or WebP · Max 5 MB · Your photo is not shown publicly"}
+                {lang === "es" ? "JPEG, PNG o WebP · Máximo 5 MB" : "JPEG, PNG, or WebP · Max 5 MB"}
               </p>
             </div>
           )}
 
-          {(user.curp || user.rfc) && (
+          {(user.drivers_license_number || user.ein) && (
             <div className="mt-3 bg-[#F4F0EB] rounded-xl px-4 py-2 text-xs space-y-1">
-              {user.curp && (
+              {user.drivers_license_number && (
                 <div>
-                  <span className="text-[#6B7280] font-medium">CURP: </span>
-                  <span className="font-mono text-[#1C1917] tracking-wide">{user.curp}</span>
+                  <span className="text-[#6B7280] font-medium">{lang === "es" ? "Licencia #" : "License #"}: </span>
+                  <span className="font-mono text-[#1C1917] tracking-wide">{user.drivers_license_number}</span>
                 </div>
               )}
-              {user.rfc && (
+              {user.ein && (
                 <div>
-                  <span className="text-[#6B7280] font-medium">RFC: </span>
-                  <span className="font-mono text-[#1C1917] tracking-wide">{user.rfc}</span>
+                  <span className="text-[#6B7280] font-medium">EIN: </span>
+                  <span className="font-mono text-[#1C1917] tracking-wide">{formatEinDisplay(user.ein)}</span>
+                </div>
+              )}
+              {user.provider_entity_type && (
+                <div className="text-[#6B7280]">
+                  {lang === "es" ? "Tipo" : "Type"}: {user.provider_entity_type}
                 </div>
               )}
             </div>
           )}
 
-          {ineMsg && (
+          {dlMsg && (
             <p className={`mt-3 text-xs rounded-xl px-4 py-2 ${
-              ineMsg.startsWith("✓") ? "bg-[#ECFDF5] text-[#065F46]" : "bg-red-50 text-red-600"
+              dlMsg.startsWith("✓") ? "bg-[#ECFDF5] text-[#065F46]" : "bg-red-50 text-red-600"
             }`}>
-              {ineMsg}
+              {dlMsg}
             </p>
           )}
         </div>

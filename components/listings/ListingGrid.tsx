@@ -214,8 +214,8 @@ export default function ListingGrid({
                   </span>
                   <SellerVerificationBadges
                     trustBadge={listing.seller_badge}
-                    ineVerified={listing.seller_ine_verified}
-                    rfcVerified={listing.seller_rfc_verified}
+                    dlVerified={listing.seller_dl_verified}
+                    einVerified={listing.seller_ein_verified}
                     phoneVerified={listing.seller_phone_verified}
                     platformListingVerified={Boolean(listing.listing_admin_verified)}
                     lang={lang}

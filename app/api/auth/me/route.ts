@@ -15,6 +15,8 @@ export async function GET(req: NextRequest) {
     let user: any = null;
     let userError: any = null;
 
+    const selectFullNj =
+      "id,phone,display_name,trust_badge,phone_verified,ine_verified,rfc_verified,curp,rfc,ine_photo_url,stripe_connect_account_id,created_at,provider_entity_type,drivers_license_number,dl_photo_url,dl_verified,ein,ein_verified";
     const fullSelect =
       "id,phone,display_name,trust_badge,phone_verified,ine_verified,rfc_verified,curp,rfc,ine_photo_url,stripe_connect_account_id,created_at";
     const fullNoRfcVerifiedSelect =
@@ -40,7 +42,10 @@ export async function GET(req: NextRequest) {
     const trySelect = async (cols: string) =>
       supabase.from("users").select(cols).in("id", idVars).maybeSingle();
 
-    ({ data: user, error: userError } = await trySelect(fullSelect));
+    ({ data: user, error: userError } = await trySelect(selectFullNj));
+    if (userError?.message?.includes("does not exist")) {
+      ({ data: user, error: userError } = await trySelect(fullSelect));
+    }
     if (userError?.message?.includes("does not exist")) {
       ({ data: user, error: userError } = await trySelect(fullNoRfcVerifiedSelect));
     }
@@ -80,6 +85,10 @@ export async function GET(req: NextRequest) {
     if (user.ine_photo_url) {
       const signed = await signedInePhotoUrl(supabase, user.ine_photo_url as string);
       if (signed) user.ine_photo_url = signed;
+    }
+    if (user.dl_photo_url) {
+      const signed = await signedInePhotoUrl(supabase, user.dl_photo_url as string);
+      if (signed) user.dl_photo_url = signed;
     }
 
     const { data: listings, error: listingsError } = await supabase
@@ -127,8 +136,13 @@ export async function PATCH(req: NextRequest) {
         .maybeSingle();
 
     ({ data, error } = await patchTry(
-      "id,phone,display_name,trust_badge,phone_verified,ine_verified,rfc_verified,curp,rfc,ine_photo_url,stripe_connect_account_id,created_at",
+      "id,phone,display_name,trust_badge,phone_verified,ine_verified,rfc_verified,curp,rfc,ine_photo_url,stripe_connect_account_id,created_at,provider_entity_type,drivers_license_number,dl_photo_url,dl_verified,ein,ein_verified",
     ));
+    if (error?.message?.includes("does not exist")) {
+      ({ data, error } = await patchTry(
+        "id,phone,display_name,trust_badge,phone_verified,ine_verified,rfc_verified,curp,rfc,ine_photo_url,stripe_connect_account_id,created_at",
+      ));
+    }
     if (error?.message?.includes("does not exist")) {
       ({ data, error } = await patchTry(
         "id,phone,display_name,trust_badge,phone_verified,ine_verified,curp,rfc,ine_photo_url,stripe_connect_account_id,created_at",
@@ -183,6 +197,10 @@ export async function PATCH(req: NextRequest) {
     if (data.ine_photo_url) {
       const signed = await signedInePhotoUrl(supabase, data.ine_photo_url as string);
       if (signed) data.ine_photo_url = signed;
+    }
+    if (data.dl_photo_url) {
+      const signed = await signedInePhotoUrl(supabase, data.dl_photo_url as string);
+      if (signed) data.dl_photo_url = signed;
     }
 
     return NextResponse.json({ user: data });

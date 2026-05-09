@@ -84,7 +84,7 @@ async function getListingSellerId(listingId: string): Promise<string | null> {
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   try {
     const res = await fetch(
-      `${getSupabaseUrl()}/rest/v1/listings?id=eq.${params.id}&select=*,users!fk_listings_seller(display_name,avatar_url,trust_badge,ine_verified,rfc_verified,created_at)`,
+      `${getSupabaseUrl()}/rest/v1/listings?id=eq.${params.id}&select=*,users!fk_listings_seller(display_name,avatar_url,trust_badge,dl_verified,ein_verified,ine_verified,rfc_verified,created_at)`,
       { headers: hJson(), cache: "no-store" }
     );
     const data = await res.json();

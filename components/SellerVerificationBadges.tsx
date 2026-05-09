@@ -2,9 +2,10 @@ import type { Lang } from "@/lib/i18n-lang";
 
 type Props = {
   trustBadge: string;
-  ineVerified: boolean;
-  /** RFC reviewed by admin (Mexico tax ID). */
-  rfcVerified?: boolean;
+  /** Driver's license / individual ID verified by admin (legacy: INE). */
+  dlVerified: boolean;
+  /** EIN verified for registered businesses (legacy: RFC). */
+  einVerified?: boolean;
   phoneVerified: boolean;
   lang: Lang;
   /** Listing approved in admin (`listings.is_verified`) — show chip if no stronger signal. */
@@ -32,13 +33,12 @@ function tierClass(tier: "bronze" | "gold" | "diamond"): string {
 }
 
 /**
- * Seller trust chips: tier (Bronce/Oro/Diamante), optional INE, ✓ Teléfono (red) when phone verified
- * and INE is not shown — Teléfono appears alongside tier so both stay visible on cards and listing detail.
+ * Seller trust chips: tier, optional DL (individual ID), optional EIN (business), ✓ Teléfono when phone-only ID path.
  */
 export function SellerVerificationBadges({
   trustBadge,
-  ineVerified,
-  rfcVerified = false,
+  dlVerified,
+  einVerified = false,
   phoneVerified,
   lang,
   platformListingVerified = false,
@@ -69,42 +69,45 @@ export function SellerVerificationBadges({
     );
   }
 
-  if (ineVerified) {
-    const title = lang === "en" ? "Verified: government ID reviewed (INE)" : "Verificado: INE revisada";
+  if (dlVerified) {
+    const title =
+      lang === "en"
+        ? "Verified: driver license or government ID reviewed"
+        : "Verificado: licencia de conducir o identificación revisada";
     parts.push(
       <span
-        key="ine"
+        key="dl"
         className={`inline-flex items-center gap-0.5 ${textSm} font-bold ${padSm} rounded-md bg-emerald-100 text-emerald-900 border border-emerald-300/80 shrink-0`}
         title={title}
       >
         <span className="text-emerald-600" aria-hidden>
           ✓
         </span>
-        INE
+        {lang === "en" ? "DL / ID" : "Licencia / ID"}
       </span>
     );
   }
 
-  if (rfcVerified) {
+  if (einVerified) {
     const title =
-      lang === "en" ? "Verified: RFC reviewed by AISaravanna" : "Verificado: RFC revisado por AISaravanna";
+      lang === "en"
+        ? "Verified: business EIN (Employer ID) reviewed by AISaravanna"
+        : "Verificado: EIN de negocio revisado por AISaravanna";
     parts.push(
       <span
-        key="rfc"
+        key="ein"
         className={`inline-flex items-center gap-0.5 ${textSm} font-bold ${padSm} rounded-md bg-indigo-50 text-indigo-900 border border-indigo-200/90 shrink-0`}
         title={title}
       >
         <span className="text-indigo-600" aria-hidden>
           ✓
         </span>
-        RFC
+        EIN
       </span>
     );
   }
 
-  // Teléfono (red): show whenever phone/WhatsApp is verified unless INE chip already covers identity.
-  // Shown next to Bronce/Oro/Diamante so the checkmark + phone signal does not disappear.
-  if (phoneVerified && !ineVerified) {
+  if (phoneVerified && !dlVerified) {
     const title =
       lang === "en" ? "Verified: phone number (WhatsApp)" : "Verificado: número (WhatsApp)";
     const label = lang === "en" ? "Telephone" : "Teléfono";

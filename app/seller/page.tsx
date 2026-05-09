@@ -11,7 +11,7 @@ import { formatUsdCents } from "@/lib/money";
 function TrustBadge({ badge }: { badge: string }) {
   const map: Record<string, { label: string; color: string; bg: string; desc: string }> = {
     diamond: { label: "💎 Diamond",     color: "#1D4ED8", bg: "#EFF6FF", desc: "Vendedor top · 10+ reseñas" },
-    gold:    { label: "🥇 Gold",        color: "#92400E", bg: "#FEF3C7", desc: "INE verificado" },
+    gold:    { label: "🥇 Gold",        color: "#92400E", bg: "#FEF3C7", desc: "ID verificado" },
     bronze:  { label: "🥉 Bronze",      color: "#78350F", bg: "#FEF9EE", desc: "Teléfono verificado" },
     none:    { label: "✓ Verificado",   color: "#065F46", bg: "#ECFDF5", desc: "Cuenta activa" },
   };
@@ -63,7 +63,7 @@ export default async function SellerPage({
 
   // Fetch seller info
   const sellerRes = await fetch(
-    `${supaUrl}/rest/v1/users?id=eq.${params.id}&select=id,display_name,avatar_url,trust_badge,ine_verified,rfc_verified,phone_verified,created_at`,
+    `${supaUrl}/rest/v1/users?id=eq.${params.id}&select=id,display_name,avatar_url,trust_badge,dl_verified,ein_verified,ine_verified,rfc_verified,phone_verified,created_at`,
     { headers: h, cache: "no-store" }
   );
   const [seller] = sellerRes.ok ? await sellerRes.json() : [];
@@ -86,6 +86,8 @@ export default async function SellerPage({
   const safeListings = listings ?? [];
   const safeSold = sold ?? [];
   const memberSince = new Date(seller.created_at).getFullYear();
+  const idOk = Boolean(seller.dl_verified || seller.ine_verified);
+  const bizOk = Boolean(seller.ein_verified || seller.rfc_verified);
   const initials = (seller.display_name ?? "V").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
 
   return (
@@ -120,11 +122,11 @@ export default async function SellerPage({
               <span className={seller.phone_verified ? "text-[#059669]" : ""}>
                 {seller.phone_verified ? "✓" : "○"} Teléfono
               </span>
-              <span className={seller.ine_verified ? "text-[#059669]" : ""}>
-                {seller.ine_verified ? "✓" : "○"} INE
+              <span className={idOk ? "text-[#059669]" : ""}>
+                {idOk ? "✓" : "○"} DL / ID
               </span>
-              <span className={seller.rfc_verified ? "text-[#059669]" : ""}>
-                {seller.rfc_verified ? "✓" : "○"} RFC
+              <span className={bizOk ? "text-[#059669]" : ""}>
+                {bizOk ? "✓" : "○"} EIN
               </span>
             </div>
 

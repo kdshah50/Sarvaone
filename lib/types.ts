@@ -16,10 +16,10 @@ export interface ListingCard {
   negotiable: boolean;
   seller_name: string;
   seller_badge: string;
-  /** INE/identity checked by team — stronger than phone-only. */
-  seller_ine_verified: boolean;
-  /** RFC reviewed by admin (tax ID); optional complement to INE. */
-  seller_rfc_verified: boolean;
+  /** Driver license / individual ID verified (legacy Mexico rows may still use ine_verified only). */
+  seller_dl_verified: boolean;
+  /** EIN verified for businesses (legacy: rfc_verified). */
+  seller_ein_verified: boolean;
   /** WhatsApp/OTP verified (number holds); does not mean ID reviewed. */
   seller_phone_verified: boolean;
   /** Listing passed admin approval (is_verified) — fallback chip when seller flags missing. */

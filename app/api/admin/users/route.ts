@@ -3,6 +3,7 @@ import { createAdminSupabase } from "@/lib/auth-server";
 import { getAdminPin, isAdminPinConfigured } from "@/lib/admin-pin";
 import { signedInePhotoUrl } from "@/lib/ine-storage";
 import { normalizeCurpForStorage, normalizeRfcForStorage } from "@/lib/mx-tax-ids";
+import { normalizeDriversLicenseForStorage, normalizeEinForStorage } from "@/lib/nj-provider-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +29,18 @@ export async function GET(req: NextRequest) {
   ({ data, error } = await supabase
     .from("users")
     .select(
-      "id,phone,display_name,trust_badge,phone_verified,ine_verified,rfc_verified,curp,rfc,ine_photo_url,created_at",
+      "id,phone,display_name,trust_badge,phone_verified,ine_verified,rfc_verified,curp,rfc,ine_photo_url,provider_entity_type,drivers_license_number,dl_photo_url,dl_verified,ein,ein_verified,created_at",
     )
     .order("created_at", { ascending: false }));
+
+  if (error?.message?.includes("does not exist")) {
+    ({ data, error } = await supabase
+      .from("users")
+      .select(
+        "id,phone,display_name,trust_badge,phone_verified,ine_verified,rfc_verified,curp,rfc,ine_photo_url,created_at",
+      )
+      .order("created_at", { ascending: false }));
+  }
 
   if (error?.message?.includes("does not exist")) {
     ({ data, error } = await supabase
@@ -94,6 +104,10 @@ export async function GET(req: NextRequest) {
       const signed = await signedInePhotoUrl(supabase, u.ine_photo_url as string);
       if (signed) u.ine_photo_url = signed;
     }
+    if (u.dl_photo_url) {
+      const signed = await signedInePhotoUrl(supabase, u.dl_photo_url as string);
+      if (signed) u.dl_photo_url = signed;
+    }
   }
 
   return NextResponse.json({ users: rows });
@@ -131,6 +145,38 @@ export async function PATCH(req: NextRequest) {
 
     if (body.rfc_verified !== undefined) {
       updates.rfc_verified = Boolean(body.rfc_verified);
+    }
+
+    if (body.dl_verified !== undefined) {
+      updates.dl_verified = Boolean(body.dl_verified);
+    }
+
+    if (body.ein_verified !== undefined) {
+      updates.ein_verified = Boolean(body.ein_verified);
+    }
+
+    if (body.provider_entity_type !== undefined) {
+      const pet = String(body.provider_entity_type ?? "").trim().toLowerCase();
+      if (pet === "" || pet === "null") {
+        updates.provider_entity_type = null;
+      } else if (pet === "individual" || pet === "business") {
+        updates.provider_entity_type = pet;
+      } else {
+        return NextResponse.json(
+          { error: "provider_entity_type must be individual, business, or empty" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (body.drivers_license_number !== undefined) {
+      const raw = body.drivers_license_number === null || body.drivers_license_number === "" ? "" : String(body.drivers_license_number);
+      updates.drivers_license_number = raw ? normalizeDriversLicenseForStorage(raw) : null;
+    }
+
+    if (body.ein !== undefined) {
+      const raw = body.ein === null || body.ein === "" ? "" : String(body.ein);
+      updates.ein = raw ? normalizeEinForStorage(raw) : null;
     }
 
     if (body.display_name !== undefined) {

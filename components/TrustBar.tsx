@@ -1,7 +1,7 @@
 export default function TrustBar() {
   const items = [
     { icon: "🛡️", title: "Compra protegida",     sub: "Escrow hasta confirmar" },
-    { icon: "✓",  title: "Vendedores verificados", sub: "INE · RFC/CURP · teléfono" },
+    { icon: "✓",  title: "Vendedores verificados", sub: "Licencia (DL) · EIN de negocio · teléfono" },
     { icon: "⚡", title: "Publicar en 30s",        sub: "IA detecta tu artículo" },
   ];
   return (

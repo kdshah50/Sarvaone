@@ -73,17 +73,17 @@ function mergeUiPriceUsdIntoParsed(
   return out;
 }
 
-const SELECT_COLS_FULL = "id,title_es,title_en,price_mxn,category_id,condition,location_city,location_lat,location_lng,shipping_available,negotiable,photo_urls,payment_methods,users!fk_listings_seller(display_name,trust_badge,ine_verified,rfc_verified,phone_verified)";
-const SELECT_COLS_BASE = "id,title_es,title_en,price_mxn,category_id,condition,location_city,location_lat,location_lng,shipping_available,negotiable,photo_urls,users!fk_listings_seller(display_name,trust_badge,ine_verified,rfc_verified,phone_verified)";
+const SELECT_COLS_FULL = "id,title_es,title_en,price_mxn,category_id,condition,location_city,location_lat,location_lng,shipping_available,negotiable,photo_urls,payment_methods,users!fk_listings_seller(display_name,trust_badge,dl_verified,ein_verified,ine_verified,rfc_verified,phone_verified)";
+const SELECT_COLS_BASE = "id,title_es,title_en,price_mxn,category_id,condition,location_city,location_lat,location_lng,shipping_available,negotiable,photo_urls,users!fk_listings_seller(display_name,trust_badge,dl_verified,ein_verified,ine_verified,rfc_verified,phone_verified)";
 const LISTING_CORE_COLS_NO_USER =
   "id,title_es,title_en,price_mxn,category_id,condition,location_city,location_lat,location_lng,shipping_available,negotiable,photo_urls,payment_methods,embedding";
 
 const SELECT_EMBED_FULL =
   LISTING_CORE_COLS_NO_USER +
-  ",users!fk_listings_seller(display_name,trust_badge,ine_verified,rfc_verified,phone_verified)";
+  ",users!fk_listings_seller(display_name,trust_badge,dl_verified,ein_verified,ine_verified,rfc_verified,phone_verified)";
 
 const USER_EMBED_SELECT =
-  "id,users!fk_listings_seller(display_name,trust_badge,ine_verified,rfc_verified,phone_verified)";
+  "id,users!fk_listings_seller(display_name,trust_badge,dl_verified,ein_verified,ine_verified,rfc_verified,phone_verified)";
 
 /** Dense / RPC rows often omit `users`; attach seller embed so listing cards can show trust badges. */
 async function enrichResultsWithSellerUsers(

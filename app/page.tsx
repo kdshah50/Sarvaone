@@ -13,6 +13,8 @@ import { getServerFetchOrigin } from "@/lib/app-url";
 import { getServiceRoleRestHeaders, getSupabaseUrl } from "@/lib/service-rest";
 import {
   embeddedSellerRow,
+  isSellerDlVerifiedDisplay,
+  isSellerEinVerifiedDisplay,
   isSellerPhoneVerifiedForDisplay,
 } from "@/lib/seller-trust-display";
 import { normalizeBrowseCategory } from "@/lib/marketplace-categories";
@@ -138,6 +140,8 @@ export default async function HomePage({ searchParams }: Props) {
           const u = embeddedSellerRow(row.users) as {
             display_name?: string | null;
             trust_badge?: string | null;
+            dl_verified?: boolean | null;
+            ein_verified?: boolean | null;
             ine_verified?: boolean | null;
             rfc_verified?: boolean | null;
             phone_verified?: boolean | null;
@@ -156,8 +160,8 @@ export default async function HomePage({ searchParams }: Props) {
             shipping_available: row.shipping_available, negotiable: row.negotiable,
             seller_name: u?.display_name ?? "Proveedor",
             seller_badge: u?.trust_badge ?? "none",
-            seller_ine_verified: Boolean(u?.ine_verified),
-            seller_rfc_verified: Boolean(u?.rfc_verified),
+            seller_dl_verified: isSellerDlVerifiedDisplay(u),
+            seller_ein_verified: isSellerEinVerifiedDisplay(u),
             seller_phone_verified: isSellerPhoneVerifiedForDisplay(u),
             listing_admin_verified: Boolean(row.is_verified),
             payment_methods: row.payment_methods ?? null,
@@ -186,7 +190,7 @@ export default async function HomePage({ searchParams }: Props) {
         "id,title_es,title_en,price_mxn,category_id,condition,is_verified,location_city,location_lat,location_lng,shipping_available,negotiable,photo_urls,payment_methods";
       const colsEmbed =
         colsBase +
-        ",users!fk_listings_seller(display_name,trust_badge,ine_verified,rfc_verified,phone_verified)";
+        ",users!fk_listings_seller(display_name,trust_badge,dl_verified,ein_verified,ine_verified,rfc_verified,phone_verified)";
 
       let browseRes = await fetch(
         `${supaUrl}${basePath}&select=${encodeURIComponent(colsEmbed)}`,
@@ -225,6 +229,8 @@ export default async function HomePage({ searchParams }: Props) {
           const u = embeddedSellerRow(row.users) as {
             display_name?: string | null;
             trust_badge?: string | null;
+            dl_verified?: boolean | null;
+            ein_verified?: boolean | null;
             ine_verified?: boolean | null;
             rfc_verified?: boolean | null;
             phone_verified?: boolean | null;
@@ -243,8 +249,8 @@ export default async function HomePage({ searchParams }: Props) {
             shipping_available: row.shipping_available, negotiable: row.negotiable,
             seller_name: u?.display_name ?? "Proveedor",
             seller_badge: u?.trust_badge ?? "none",
-            seller_ine_verified: Boolean(u?.ine_verified),
-            seller_rfc_verified: Boolean(u?.rfc_verified),
+            seller_dl_verified: isSellerDlVerifiedDisplay(u),
+            seller_ein_verified: isSellerEinVerifiedDisplay(u),
             seller_phone_verified: isSellerPhoneVerifiedForDisplay(u),
             listing_admin_verified: Boolean(row.is_verified),
             payment_methods: row.payment_methods ?? null,

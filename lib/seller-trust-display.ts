@@ -24,16 +24,24 @@ export function isSellerPhoneVerifiedForDisplay(u: {
   return b === "bronze" || b === "gold" || b === "diamond";
 }
 
-export function isSellerIneVerified(u: { ine_verified?: boolean | null } | null | undefined): boolean {
-  return Boolean(u?.ine_verified);
+/** NJ: DL verified, or legacy INE flag until data is migrated. */
+export function isSellerDlVerifiedDisplay(
+  u: { dl_verified?: boolean | null; ine_verified?: boolean | null } | null | undefined
+): boolean {
+  return Boolean(u?.dl_verified ?? u?.ine_verified);
 }
 
-export function isSellerRfcVerified(u: { rfc_verified?: boolean | null } | null | undefined): boolean {
-  return Boolean(u?.rfc_verified);
+/** NJ: EIN verified, or legacy RFC flag until data is migrated. */
+export function isSellerEinVerifiedDisplay(
+  u: { ein_verified?: boolean | null; rfc_verified?: boolean | null } | null | undefined
+): boolean {
+  return Boolean(u?.ein_verified ?? u?.rfc_verified);
 }
 
 type SellerTrustFields = {
   trust_badge?: string | null;
+  dl_verified?: boolean | null;
+  ein_verified?: boolean | null;
   ine_verified?: boolean | null;
   rfc_verified?: boolean | null;
   phone_verified?: boolean | null;
@@ -49,15 +57,15 @@ export function verificationPropsFromSellerRow(
   if (!row) {
     return {
       trustBadge: "none" as string,
-      ineVerified: false,
-      rfcVerified: false,
+      dlVerified: false,
+      einVerified: false,
       phoneVerified: false,
     };
   }
   return {
     trustBadge: row.trust_badge ?? "none",
-    ineVerified: isSellerIneVerified(row),
-    rfcVerified: isSellerRfcVerified(row),
+    dlVerified: isSellerDlVerifiedDisplay(row),
+    einVerified: isSellerEinVerifiedDisplay(row),
     phoneVerified: isSellerPhoneVerifiedForDisplay(row),
   };
 }

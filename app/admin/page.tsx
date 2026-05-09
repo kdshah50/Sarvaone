@@ -27,6 +27,12 @@ type UserRow = {
   phone_verified: boolean;
   ine_verified: boolean;
   rfc_verified?: boolean;
+  provider_entity_type?: string | null;
+  drivers_license_number?: string | null;
+  dl_photo_url?: string | null;
+  dl_verified?: boolean;
+  ein?: string | null;
+  ein_verified?: boolean;
   curp: string | null;
   rfc: string | null;
   ine_photo_url: string | null;
@@ -565,41 +571,58 @@ export default function AdminPage() {
                               ✓ Phone
                             </span>
                           )}
-                          {u.ine_verified && (
-                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700">
-                              ✓ INE
+                          {u.dl_verified && (
+                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700">
+                              ✓ DL / ID
                             </span>
                           )}
-                          {u.rfc_verified && (
+                          {u.ein_verified && (
                             <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-800">
-                              ✓ RFC
+                              ✓ EIN
                             </span>
                           )}
                         </div>
                       </div>
 
-                      {/* CURP, RFC & INE verification */}
                       <div className="flex flex-wrap gap-3 items-start mb-3">
-                        {u.curp && (
-                          <div className="bg-[#ECFDF5] rounded-xl px-3 py-2 text-xs">
-                            <span className="font-semibold text-[#065F46]">🪪 CURP:</span>{" "}
-                            <span className="font-mono text-[#1C1917] tracking-wide">{u.curp}</span>
+                        {u.provider_entity_type && (
+                          <div className="bg-slate-50 rounded-xl px-3 py-2 text-xs">
+                            <span className="font-semibold text-slate-700">Tipo:</span>{" "}
+                            <span className="text-[#1C1917]">{u.provider_entity_type}</span>
                           </div>
                         )}
-                        {u.rfc && (
+                        {u.drivers_license_number && (
                           <div className="bg-[#ECFDF5] rounded-xl px-3 py-2 text-xs">
-                            <span className="font-semibold text-[#065F46]">📋 RFC:</span>{" "}
-                            <span className="font-mono text-[#1C1917] tracking-wide">{u.rfc}</span>
+                            <span className="font-semibold text-[#065F46]">🪪 DL #:</span>{" "}
+                            <span className="font-mono text-[#1C1917] tracking-wide">{u.drivers_license_number}</span>
                           </div>
+                        )}
+                        {u.ein && (
+                          <div className="bg-[#ECFDF5] rounded-xl px-3 py-2 text-xs">
+                            <span className="font-semibold text-[#065F46]">🏢 EIN:</span>{" "}
+                            <span className="font-mono text-[#1C1917] tracking-wide">{u.ein}</span>
+                          </div>
+                        )}
+                        {u.dl_photo_url && (
+                          <a href={u.dl_photo_url} target="_blank" rel="noopener noreferrer"
+                            className="bg-emerald-50 rounded-xl px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors">
+                            📸 Ver foto licencia →
+                          </a>
                         )}
                         {u.ine_photo_url && (
                           <a href={u.ine_photo_url} target="_blank" rel="noopener noreferrer"
                             className="bg-blue-50 rounded-xl px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors">
-                            📸 Ver foto INE →
+                            📸 Foto ID (legado) →
                           </a>
                         )}
-                        {!u.curp && !u.rfc && !u.ine_photo_url && (
-                          <span className="text-xs text-[#9CA3AF]">Sin documentos de verificación</span>
+                        {!u.drivers_license_number && !u.ein && !u.dl_photo_url && !u.ine_photo_url && !u.curp && !u.rfc && (
+                          <span className="text-xs text-[#9CA3AF]">Sin documentos en archivo</span>
+                        )}
+                        {(u.curp || u.rfc) && (
+                          <div className="flex flex-wrap gap-2 text-[10px] text-[#9CA3AF]">
+                            {u.curp && <span>CURP (legado): {u.curp}</span>}
+                            {u.rfc && <span>RFC (legado): {u.rfc}</span>}
+                          </div>
                         )}
                       </div>
 
@@ -641,6 +664,30 @@ export default function AdminPage() {
                         <div className="w-px h-6 bg-[#E5E0D8] mx-2 hidden sm:block" />
 
                         <button
+                          onClick={() => updateUser(u.id, { dl_verified: !u.dl_verified })}
+                          disabled={userSaving === u.id}
+                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors disabled:opacity-40 ${
+                            u.dl_verified
+                              ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                              : "bg-white border border-[#E5E0D8] text-[#6B7280] hover:border-emerald-400"
+                          }`}>
+                          {userSaving === u.id ? "…" : u.dl_verified ? "✓ DL verified" : "Verify DL / ID"}
+                        </button>
+
+                        <button
+                          onClick={() => updateUser(u.id, { ein_verified: !u.ein_verified })}
+                          disabled={userSaving === u.id}
+                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors disabled:opacity-40 ${
+                            u.ein_verified
+                              ? "bg-indigo-100 text-indigo-900 hover:bg-indigo-200"
+                              : "bg-white border border-[#E5E0D8] text-[#6B7280] hover:border-indigo-400"
+                          }`}>
+                          {userSaving === u.id ? "…" : u.ein_verified ? "✓ EIN verified" : "Verify EIN"}
+                        </button>
+
+                        <div className="w-px h-6 bg-[#E5E0D8] mx-2 hidden sm:block" />
+
+                        <button
                           onClick={() => updateUser(u.id, { ine_verified: !u.ine_verified })}
                           disabled={userSaving === u.id}
                           className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors disabled:opacity-40 ${
@@ -648,7 +695,7 @@ export default function AdminPage() {
                               ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
                               : "bg-white border border-[#E5E0D8] text-[#6B7280] hover:border-blue-400"
                           }`}>
-                          {userSaving === u.id ? "…" : u.ine_verified ? "✓ INE Verified" : "Verify INE"}
+                          {userSaving === u.id ? "…" : u.ine_verified ? "✓ Legacy INE" : "Legacy INE flag"}
                         </button>
 
                         <button
@@ -659,7 +706,7 @@ export default function AdminPage() {
                               ? "bg-indigo-100 text-indigo-800 hover:bg-indigo-200"
                               : "bg-white border border-[#E5E0D8] text-[#6B7280] hover:border-indigo-400"
                           }`}>
-                          {userSaving === u.id ? "…" : u.rfc_verified ? "✓ RFC Verified" : "Verify RFC"}
+                          {userSaving === u.id ? "…" : u.rfc_verified ? "✓ Legacy RFC" : "Legacy RFC flag"}
                         </button>
                       </div>
                     </div>
