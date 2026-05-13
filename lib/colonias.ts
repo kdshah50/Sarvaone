@@ -218,8 +218,13 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/** Listings within this distance of a selected county centroid pass the county filter. */
-export const COLONIA_RADIUS_KM = 72;
+/**
+ * Rough disk filter around each county centroid when the shopper picks a NJ county chip.
+ * Too large overlaps the next county (e.g. Middlesex demos ~43km from Monmouth centroid could
+ * satisfy a 72km disk). ~38km keeps most of one NJ county near its centroid without swallowing the
+ * whole adjacent county; `colonia_relaxed` may still widen if nothing matches locally.
+ */
+export const COLONIA_RADIUS_KM = 38;
 
 /**
  * Given lat/lng, find the nearest county (excluding "otro").
