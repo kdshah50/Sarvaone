@@ -40,6 +40,25 @@ export function extractNjPlaceFromQuery(full: string): { phrase: string; strippe
   const q = full.trim().replace(/\s+/g, " ");
   if (q.length < 3) return null;
 
+  // "Eatontown NJ" / "… Red Bank New Jersey …" (no comma)
+  const spaceNj = q.match(/\b([A-Za-z][A-Za-z'\s.-]{2,52})\s+(NJ|New Jersey)\b/i);
+  if (spaceNj?.[1]) {
+    const phrase = spaceNj[1].trim().replace(/^.*\bin\s+/i, "").trim();
+    if (
+      phrase.length >= 3 &&
+      phrase.length <= 54 &&
+      /^[A-Za-z]/.test(phrase) &&
+      !/\d/.test(phrase)
+    ) {
+      const norm = phrase.toLowerCase();
+      const firstTok = norm.split(/\s+/)[0] ?? "";
+      if (!PLACE_BLACKLIST.has(firstTok)) {
+        const stripped = tidySearchAfterPlaceRemoval(stripOnce(q, spaceNj[0]));
+        return { phrase, strippedQuery: stripped };
+      }
+    }
+  }
+
   // "… Edison, NJ …" / "… , New Jersey"
   const commaNj = q.match(/\b([^,!?]{2,52}),\s*(NJ|New Jersey)\b/i);
   if (commaNj?.[1]) {
@@ -52,6 +71,27 @@ export function extractNjPlaceFromQuery(full: string): { phrase: string; strippe
         stripped = tidySearchAfterPlaceRemoval(stripped);
         return phrase.length <= 54 ? { phrase, strippedQuery: stripped } : null;
       }
+    }
+  }
+
+  // Lone Title-Case township ("Eatontown", "Atlantic City") — do not force "near …"
+  const singlePlace = q.match(/^([A-Z][a-z'-]+(?: [A-Z][a-z'-]+){0,2})\s*$/);
+  const placeOnly = singlePlace?.[1]?.trim();
+  if (placeOnly) {
+    const norm = placeOnly.toLowerCase();
+    const tokens = norm.split(/\s+/);
+    const firstTok = tokens[0] ?? "";
+    const nuisanceService = /^(deep|dry|wet|heavy|minor|whole|cleaning|painting|plumbing)$/i.test(
+      firstTok,
+    );
+    if (
+      !tokens.some((t) => PLACE_BLACKLIST.has(t)) &&
+      !nuisanceService &&
+      placeOnly.length >= 3 &&
+      placeOnly.length <= 48 &&
+      !/\d/.test(placeOnly)
+    ) {
+      return { phrase: placeOnly, strippedQuery: "" };
     }
   }
 

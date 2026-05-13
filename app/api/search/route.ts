@@ -222,7 +222,9 @@ export async function GET(req: NextRequest) {
   geoZipApplied = inferred.geoZipApplied ?? geoZipApplied;
 
   const effectiveColoniaSlug =
-    validatedColoniaChip || inferred.inferredCountySlug;
+    inferred.enrichment !== "none" && inferred.inferredCountySlug
+      ? inferred.inferredCountySlug
+      : validatedColoniaChip || inferred.inferredCountySlug;
   const coloniaRef =
     effectiveColoniaSlug ? COLONIAS[effectiveColoniaSlug] ?? null : null;
 

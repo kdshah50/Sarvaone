@@ -23,8 +23,9 @@ function isValidCountyChip(k: string): boolean {
 }
 
 /**
- * Strip ZIP placenames / alias noise from `q`, fill shopper coords when missing,
- * infer NJ county slug (Census ZIP centroid or Nominatim city county) unless `lockedColoniaSlug` wins.
+ * Strip ZIP / placenames, fill shopper coords, infer NJ county.
+ * Resolved **township (Nominatim)** overrides ZIP centroid county and mismatched `lockedColoniaSlug`
+ * (e.g. hero chip stayed Middlesex while the shopper typed Eatontown).
  */
 export async function inferNjShopperSearchContext(opts: {
   rawQuery: string;
@@ -34,8 +35,6 @@ export async function inferNjShopperSearchContext(opts: {
   lockedColoniaSlug?: string | null;
 }): Promise<NjShopperSearchContextInfer> {
   let cleaned = opts.rawQuery.trim().replace(/\s+/g, " ");
-  let enrichment: NjLocationEnrichment = "none";
-  let inferredCountySlug = "";
 
   let lat =
     opts.shopperLat != null && Number.isFinite(opts.shopperLat) ? opts.shopperLat : null;
@@ -45,12 +44,12 @@ export async function inferNjShopperSearchContext(opts: {
   const locked = (opts.lockedColoniaSlug ?? "").trim().toLowerCase();
   const lockedValid = isValidCountyChip(locked);
 
+  let slugAlias = "";
   if (!lockedValid) {
     const hitAlias = detectColoniaInQuery(cleaned);
     if (hitAlias) {
-      inferredCountySlug = hitAlias.coloniaKey;
+      slugAlias = hitAlias.coloniaKey;
       cleaned = (hitAlias.cleanedQuery ?? cleaned).replace(/\s+/g, " ").trim();
-      enrichment = "colonia_alias";
     }
   }
 
@@ -59,6 +58,7 @@ export async function inferNjShopperSearchContext(opts: {
   const zipResolved = zipFromParam ?? zipInText?.zip ?? null;
 
   let geoZipApplied: string | null = null;
+  let slugZip = "";
 
   if (zipResolved) {
     geoZipApplied = zipResolved;
@@ -71,42 +71,41 @@ export async function inferNjShopperSearchContext(opts: {
         lat = geo.lat;
         lng = geo.lng;
       }
-      if (!lockedValid && !inferredCountySlug) {
-        const c = await censusCountySlugAtLngLat(geo.lng, geo.lat);
-        if (c?.slug) {
-          inferredCountySlug = c.slug;
-          enrichment = "zip_county";
-        }
-      }
+      const c = await censusCountySlugAtLngLat(geo.lng, geo.lat);
+      if (c?.slug) slugZip = c.slug;
     }
   }
 
+  let countyFromTown: string | null = null;
+
   const placeExtract = extractNjPlaceFromQuery(cleaned);
   if (placeExtract) {
-    const inferCountyFromCity = !lockedValid && !inferredCountySlug;
-    if (inferCountyFromCity) {
-      const nom = await nominatimGeocodeNjPlace(placeExtract.phrase);
-      if (nom?.coloniaSlug) {
-        inferredCountySlug = nom.coloniaSlug;
-        enrichment = "city_osm";
-        if (lat == null || lng == null) {
-          lat = nom.lat;
-          lng = nom.lng;
-        }
+    const nom = await nominatimGeocodeNjPlace(placeExtract.phrase);
+    cleaned = placeExtract.strippedQuery.replace(/\s+/g, " ").trim();
+
+    if (nom?.coloniaSlug) {
+      if (!lockedValid || nom.coloniaSlug !== locked) {
+        countyFromTown = nom.coloniaSlug;
       }
-    } else if (lockedValid && (lat == null || lng == null)) {
-      const nom = await nominatimGeocodeNjPlace(placeExtract.phrase);
-      if (
-        nom &&
-        Number.isFinite(nom.lat) &&
-        Number.isFinite(nom.lng) &&
-        (lat == null || lng == null)
-      ) {
+      if (lat == null || lng == null) {
         lat = nom.lat;
         lng = nom.lng;
       }
     }
-    cleaned = placeExtract.strippedQuery.replace(/\s+/g, " ").trim();
+  }
+
+  let inferredCountySlug = "";
+  let enrichment: NjLocationEnrichment = "none";
+
+  if (countyFromTown) {
+    inferredCountySlug = countyFromTown;
+    enrichment = "city_osm";
+  } else if (!lockedValid && slugAlias) {
+    inferredCountySlug = slugAlias;
+    enrichment = "colonia_alias";
+  } else if (slugZip) {
+    inferredCountySlug = slugZip;
+    enrichment = "zip_county";
   }
 
   return {
