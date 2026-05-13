@@ -13,7 +13,7 @@ import {
   type ParsedQueryFilters,
 } from "@/lib/search-query-parse";
 import { postgrestActiveListingVerificationFragment } from "@/lib/browse-listings-filters";
-import { isBrowseEnabledCategoryId } from "@/lib/marketplace-categories";
+import { browseEnabledServiceVerticalIds, isBrowseEnabledCategoryId } from "@/lib/marketplace-categories";
 import { cosineSimilarity, parseStoredEmbedding, similarityScore01 } from "@/lib/search-embedding";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY ?? "";
@@ -422,15 +422,40 @@ export async function GET(req: NextRequest) {
   /** Last resort when keyword + semantic still find nothing verified in category (bad recall or missing embeddings). */
   if (!results.length && query.trim()) {
     try {
-      const verifyFrag = postgrestActiveListingVerificationFragment(searchCategory);
-      let fbUrl =
-        `${supaUrl}/rest/v1/listings?${verifyFrag}&category_id=eq.${encodeURIComponent(searchCategory)}` +
-        `&select=${SELECT_COLS_FULL}&order=created_at.desc&limit=48`;
-      fbUrl = appendPriceToUrl(fbUrl);
-      const fetched = await listingRowsFromUrl(fbUrl);
-      let fbRows = fetched.rows.filter((l) =>
-        listingMatchesPriceFilters(l.price_mxn, effective),
-      );
+      const fallbackVerifyFrag = postgrestActiveListingVerificationFragment("services");
+      const svcVerticals = browseEnabledServiceVerticalIds();
+      const useWideCategories =
+        searchCategory === "services" && svcVerticals.length > 0;
+      const categoryFilter = useWideCategories
+        ? `category_id=in.(${svcVerticals.map((id) => encodeURIComponent(id)).join(",")})`
+        : `category_id=eq.${encodeURIComponent(searchCategory)}`;
+
+      /** When the shopper is on generic Services, widen `category_id` and retry ILIKE keywords first so Handyman/etc. titles match. */
+      const fbKw = postgrestSparseKeywordClause(sparsePhrase);
+      let fbKwParam =
+        fbKw == null ? "" : `${fbKw.dimension}=${encodeURIComponent(fbKw.clause)}&`;
+
+      let fbRows: any[] = [];
+      if (useWideCategories && fbKwParam.length > 0) {
+        const kwUrl =
+          `${supaUrl}/rest/v1/listings?${fallbackVerifyFrag}&${categoryFilter}&${fbKwParam}` +
+          `select=${SELECT_COLS_FULL}&limit=48`;
+        const kwFetched = await listingRowsFromUrl(appendPriceToUrl(kwUrl));
+        fbRows = kwFetched.rows.filter((l) =>
+          listingMatchesPriceFilters(l.price_mxn, effective),
+        );
+      }
+
+      if (!fbRows.length) {
+        let fbUrl =
+          `${supaUrl}/rest/v1/listings?${fallbackVerifyFrag}&${categoryFilter}` +
+          `&select=${SELECT_COLS_FULL}&order=created_at.desc&limit=48`;
+        fbUrl = appendPriceToUrl(fbUrl);
+        const fetched = await listingRowsFromUrl(fbUrl);
+        fbRows = fetched.rows.filter((l) =>
+          listingMatchesPriceFilters(l.price_mxn, effective),
+        );
+      }
 
       let fbRelaxedCounty = false;
       if (coloniaRef) {

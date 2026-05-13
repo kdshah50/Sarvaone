@@ -62,6 +62,7 @@ function stripConversationalFiller(s: string): string {
     /^(can|could|would)\s+(you\s+|some(one|body)|any(one|body))\s+(please\s+)?/i,
     /^does\s+any(one|body)\s+know\s+/i,
     /^hoping\s+(to\s+find|someone)\s+/i,
+    /^someone\s+to\s+/i,
     /^busco\s+/i,
     /^necesito\s+(algo\s+|alguien\s+)?/i,
     /^quiero\s+(contratar|encontrar|alguien|una|un)\s+/i,
@@ -291,6 +292,12 @@ const SPARSE_TOKEN_STOPWORDS = new Set([
   "los", "las", "unos", "unas", "por", "con", "que", "una", "del", "al", "como",
 ]);
 
+/**
+ * 3-letter tokens excluded from ILIKE — `*fan*` matches unintended substrings (`infant`, `infantil`, …).
+ * Use “ceiling fan”, Spanish “ventilador”, etc.; semantic search still uses the full phrase.
+ */
+const SPARSE_ILIKE_TRAP_TOKENS = new Set(["fan"]);
+
 function escIlike(fragment: string): string {
   return `*${fragment.replace(/\\/g, "").replace(/\*/g, "").trim()}*`;
 }
@@ -335,12 +342,25 @@ export function postgrestSparseKeywordClause(sparsePhrase: string): {
     .toLowerCase()
     .split(/\s+/)
     .map((t) => t.replace(/[^a-záéíóúüñ0-9-]/gi, ""))
-    .filter((t) => t.length >= 3 && !SPARSE_TOKEN_STOPWORDS.has(t));
+    .filter(
+      (t) =>
+        t.length >= 3 &&
+        !SPARSE_TOKEN_STOPWORDS.has(t) &&
+        !(t.length <= 4 && SPARSE_ILIKE_TRAP_TOKENS.has(t)),
+    );
   const unique = [...new Set(tokens)].slice(0, 8);
 
   if (unique.length === 0) {
     const safe = trimmed.replace(/[*%,()]/g, "").trim();
     if (!safe) return null;
+    const oneWord = safe.toLowerCase().split(/\s+/).filter(Boolean);
+    if (
+      oneWord.length === 1 &&
+      oneWord[0].length <= 4 &&
+      SPARSE_ILIKE_TRAP_TOKENS.has(oneWord[0])
+    ) {
+      return null;
+    }
     const pat = escIlike(safe);
     const tuple = SPARSE_TEXT_FIELDS.map((f) => `${f}.ilike.${pat}`).join(",");
     return { dimension: "or", clause: `(${tuple})` };
@@ -371,13 +391,26 @@ export function postgrestSparseKeywordClauseLoose(sparsePhrase: string): {
     .toLowerCase()
     .split(/\s+/)
     .map((t) => t.replace(/[^a-záéíóúüñ0-9-]/gi, ""))
-    .filter((t) => t.length >= 3 && !SPARSE_TOKEN_STOPWORDS.has(t));
+    .filter(
+      (t) =>
+        t.length >= 3 &&
+        !SPARSE_TOKEN_STOPWORDS.has(t) &&
+        !(t.length <= 4 && SPARSE_ILIKE_TRAP_TOKENS.has(t)),
+    );
   const unique = [...new Set(tokens)].slice(0, 8);
 
   const branches: string[] = [];
   if (unique.length === 0) {
     const safe = trimmed.replace(/[*%,()]/g, "").trim();
     if (!safe) return null;
+    const oneWord = safe.toLowerCase().split(/\s+/).filter(Boolean);
+    if (
+      oneWord.length === 1 &&
+      oneWord[0].length <= 4 &&
+      SPARSE_ILIKE_TRAP_TOKENS.has(oneWord[0])
+    ) {
+      return null;
+    }
     const pat = escIlike(safe);
     for (const f of SPARSE_TEXT_FIELDS) branches.push(`${f}.ilike.${pat}`);
   } else {

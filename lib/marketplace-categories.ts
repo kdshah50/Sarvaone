@@ -247,3 +247,8 @@ export function isServiceVerticalCategory(categoryId: string): boolean {
   const c = MARKETPLACE_CATEGORIES.find((x) => x.id === categoryId);
   return Boolean(c?.serviceVertical);
 }
+
+/** Browse slugs tagged `serviceVertical` (used when search must span all local-service verticals from the generic Services tab). */
+export function browseEnabledServiceVerticalIds(): readonly string[] {
+  return MARKETPLACE_CATEGORIES.filter((c) => c.browseEnabled && c.serviceVertical).map((c) => c.id);
+}
