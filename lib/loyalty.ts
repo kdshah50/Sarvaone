@@ -101,6 +101,7 @@ export async function redeemDiscount(
   userId: string,
   bookingId: string,
   discountCents: number,
+  _discountPctApplied?: number,
 ): Promise<void> {
   const points = commissionCentsToPoints(discountCents);
   if (points <= 0) return;

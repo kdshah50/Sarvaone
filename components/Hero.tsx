@@ -1,7 +1,8 @@
 "use client";
 import { useState, Suspense, useEffect } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { COLONIAS, COLONIA_KEYS, detectColoniaInQuery, coloniaLabel } from "@/lib/colonias";
+import { COLONIAS, coloniaKeysSorted, detectColoniaInQuery, coloniaLabel } from "@/lib/colonias";
 import { detectZipInQuery } from "@/lib/us-zip";
 import { langFromParam } from "@/lib/i18n-lang";
 import { UsdWhole } from "@/components/UsdAmount";
@@ -9,6 +10,22 @@ import { UsdWhole } from "@/components/UsdAmount";
 /** Slider top = “no upper cap” in the URL (pmax omitted). Whole US dollars. */
 const PRICE_MAX_UI = 50_000;
 const PRICE_SLIDER_STEP = 50;
+
+const HERO_SERVICE_VERTICALS = [
+  { href: "/home-cleaning", en: "Home cleaning", es: "Limpieza del hogar" },
+  { href: "/pet-care", en: "Pet care", es: "Cuidado de mascotas" },
+  { href: "/ride-share", en: "Ride share", es: "Transporte" },
+  { href: "/veterinary", en: "Veterinary", es: "Veterinaria" },
+] as const;
+
+function heroServiceVerticalsSorted(lang: ReturnType<typeof langFromParam>) {
+  const locale = lang === "es" ? "es" : "en";
+  return [...HERO_SERVICE_VERTICALS].sort((a, b) => {
+    const la = lang === "es" ? a.es : a.en;
+    const lb = lang === "es" ? b.es : b.en;
+    return la.localeCompare(lb, locale, { sensitivity: "base" });
+  });
+}
 
 const T = {
   es: {
@@ -82,6 +99,8 @@ function HeroInner({ initialQuery }: { initialQuery: string }) {
   const lang = langFromParam(params.get("lang"));
   const t = T[lang];
   const activeColonia = params.get("colonia") ?? "";
+  const sortedCountyKeys = coloniaKeysSorted(lang);
+  const sortedServiceVerticals = heroServiceVerticalsSorted(lang);
 
   const priceKey = `${params.get("pmin") ?? ""}|${params.get("pmax") ?? ""}`;
   useEffect(() => {
@@ -286,14 +305,27 @@ function HeroInner({ initialQuery }: { initialQuery: string }) {
           </button>
         </div>
 
+        {/* Service vertical landings — A→Z; single column on narrow screens so wrap never breaks reading order */}
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-center justify-center gap-2 max-w-2xl mx-auto mb-4">
+          {sortedServiceVerticals.map((v) => (
+            <Link
+              key={v.href}
+              href={lang === "en" ? v.href : `${v.href}?lang=${lang}`}
+              className="px-3 py-1.5 rounded-full text-xs font-semibold bg-white/10 text-white/90 hover:bg-white/20 border border-white/20 transition-all"
+            >
+              {lang === "es" ? v.es : v.en}
+            </Link>
+          ))}
+        </div>
+
         {/* Colonia chips */}
         <div className="mt-1 mb-2">
           <span className="text-white/50 text-[11px] font-medium tracking-wide uppercase">
             {t.chipLabel}
           </span>
         </div>
-        <div className="flex flex-wrap justify-center gap-2 max-w-xl mx-auto">
-          {COLONIA_KEYS.map((key) => {
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-w-2xl mx-auto text-left">
+          {sortedCountyKeys.map((key) => {
             const c = COLONIAS[key];
             const active = activeColonia === key;
             return (

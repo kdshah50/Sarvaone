@@ -13,6 +13,19 @@ export function normalizeAuthPhone(input: string): string {
   return input.replace(/[^0-9]/g, "").replace(/^00/, "");
 }
 
+/**
+ * Normalize `users.phone` for Twilio WhatsApp: E.164 digits without `+`.
+ * US-first: bare 10 digits → `1` + NANP. Mexico numbers stay `52` + 10 digits.
+ */
+export function e164DigitsForWhatsAppRecipient(raw: string | null | undefined): string {
+  const s = (raw ?? "").trim();
+  if (!s) return "";
+  let d = canonicalizeAuthPhone(normalizeAuthPhone(s));
+  if (/^\d{10}$/.test(d)) d = `1${d}`;
+  d = canonicalizeAuthPhone(d);
+  return isValidAuthPhone(d) ? d : "";
+}
+
 /** Mexico: strip legacy mobile trunk `1` so number is `52` + 10 national digits. */
 export function canonicalizeAuthPhone(phone: string): string {
   if (/^521\d{10}$/.test(phone)) {

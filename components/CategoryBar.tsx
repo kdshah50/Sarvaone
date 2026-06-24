@@ -13,10 +13,16 @@ function CategoryBarInner() {
   const lang = langFromParam(params.get("lang"));
   const activeId = normalizeBrowseCategory(params.get("category"));
 
-  const visibleCategories = useMemo(
-    () => MARKETPLACE_CATEGORIES.filter((c) => categoryVisibleForLane(lane, c.communityLanes)),
-    [lane]
-  );
+  const visibleCategories = useMemo(() => {
+    const locale = lang === "es" ? "es" : "en";
+    return MARKETPLACE_CATEGORIES.filter((c) => categoryVisibleForLane(lane, c.communityLanes))
+      .slice()
+      .sort((a, b) =>
+        categoryLabel(a.id, lang).localeCompare(categoryLabel(b.id, lang), locale, {
+          sensitivity: "base",
+        }),
+      );
+  }, [lane, lang]);
 
   useEffect(() => {
     const cat = MARKETPLACE_CATEGORIES.find((c) => c.id === activeId);

@@ -11,11 +11,21 @@ export type CountyServiceCatalogRow = {
   strategy_tag: string | null;
 };
 
+/** Curated county chips that map to dedicated vertical landing pages. */
+const VERTICAL_LANDING: Record<string, string> = {
+  home_cleaning: "/home-cleaning",
+  pet_care: "/pet-care",
+};
+
 function chipHref(
   countyKey: string,
   slug: string,
   lang: Lang,
 ): string {
+  const landing = VERTICAL_LANDING[slug];
+  if (landing) {
+    return lang !== "en" ? `${landing}?lang=${lang}` : landing;
+  }
   const q = slug.replace(/_/g, " ");
   const p = new URLSearchParams({
     category: "services",
@@ -53,6 +63,22 @@ const TAG_HINT: Record<string, Record<Lang, string>> = {
   },
 };
 
+function catalogRowLabel(row: CountyServiceCatalogRow, lang: Lang): string {
+  return lang === "es" ? row.label_es : row.label_en;
+}
+
+function catalogRowsSortedByLabel(
+  items: CountyServiceCatalogRow[],
+  lang: Lang,
+): CountyServiceCatalogRow[] {
+  const locale = lang === "es" ? "es" : "en";
+  return [...items].sort((a, b) =>
+    catalogRowLabel(a, lang).localeCompare(catalogRowLabel(b, lang), locale, {
+      sensitivity: "base",
+    }),
+  );
+}
+
 export function CountyServiceCatalogSection({
   lang,
   countyKey,
@@ -62,7 +88,8 @@ export function CountyServiceCatalogSection({
   countyKey: string;
   items: CountyServiceCatalogRow[];
 }) {
-  if (items.length === 0) return null;
+  const sortedItems = catalogRowsSortedByLabel(items, lang);
+  if (sortedItems.length === 0) return null;
 
   const countyName = coloniaLabel(countyKey, lang);
   const title =
@@ -86,9 +113,9 @@ export function CountyServiceCatalogSection({
     <div className="mb-8 rounded-2xl border border-[#E5E0D8] bg-white/90 px-4 py-4 shadow-sm">
       <h3 className="font-serif text-lg font-bold text-[#1C1917]">{title}</h3>
       <p className="text-xs text-[#6B7280] mt-1 mb-3 max-w-3xl">{intro}</p>
-      <ul className="flex flex-wrap gap-2">
-        {items.map((row) => {
-          const label = lang === "es" ? row.label_es : row.label_en;
+      <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        {sortedItems.map((row) => {
+          const label = catalogRowLabel(row, lang);
           const blurb = lang === "es" ? row.blurb_es : row.blurb_en;
           const tag = row.strategy_tag?.trim();
           const rowHint = tag ? TAG_HINT[tag] : null;

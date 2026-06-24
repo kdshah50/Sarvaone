@@ -7,6 +7,7 @@ import AppLangSelect from "@/components/AppLangSelect";
 import { UsdCents } from "@/components/UsdAmount";
 import { clampLangForLane } from "@/lib/lang-for-lane";
 import { langFromParam, hrefWithLang, type Lang } from "@/lib/i18n-lang";
+import { PROVIDER_SERVICES } from "@/lib/provider-services";
 
 const COLONIAS_LIST = COLONIA_KEYS.map(key => ({
   value: key,
@@ -16,31 +17,7 @@ const COLONIAS_LIST = COLONIA_KEYS.map(key => ({
   lng: COLONIAS_MAP[key].lng,
 }));
 
-const SERVICES = [
-  { value: "plomero",         es: "Plomero",                    en: "Plumber" },
-  { value: "electricista",    es: "Electricista",               en: "Electrician" },
-  { value: "mecanico",        es: "Mecánico",                   en: "Mechanic" },
-  { value: "pintor",          es: "Pintor",                     en: "Painter" },
-  { value: "jardinero",       es: "Jardinero",                  en: "Gardener" },
-  { value: "limpieza",        es: "Limpieza del hogar",         en: "House Cleaning" },
-  { value: "ac",              es: "Técnico AC",                 en: "AC Technician" },
-  { value: "dentista",        es: "Dentista",                   en: "Dentist" },
-  { value: "niera",           es: "Niñera / Nanny",             en: "Babysitter / Nanny" },
-  { value: "cuidado_mayores", es: "Cuidado adultos mayores",    en: "Senior Care" },
-  { value: "paseador",        es: "Paseador de perros",         en: "Dog Walker" },
-  { value: "pet_sitting",     es: "Pet sitting / Hospedaje",    en: "Pet Sitting / Boarding" },
-  { value: "estetica_canina", es: "Estética canina",            en: "Dog Grooming" },
-  { value: "mandados",        es: "Mandados bilingüe",          en: "Bilingual Errands" },
-  { value: "chofer",          es: "Chofer privado",             en: "Private Driver" },
-  { value: "tramites",        es: "Trámites para expatriados",  en: "Expat Paperwork Help" },
-  { value: "compras",         es: "Compras a domicilio",        en: "Grocery Delivery" },
-  { value: "house_sitting",   es: "Cuidado de casa",            en: "House Sitting" },
-  { value: "yoga",            es: "Yoga / Bienestar",           en: "Yoga / Wellness" },
-  { value: "diseno",          es: "Diseño de interiores",       en: "Interior Design" },
-  { value: "espanol",         es: "Clases de español",          en: "Spanish Lessons" },
-  { value: "chef",            es: "Chef a domicilio",           en: "Private Chef" },
-  { value: "otro",            es: "Otro servicio",              en: "Other service" },
-];
+const SERVICES = PROVIDER_SERVICES;
 
 
 const T = {

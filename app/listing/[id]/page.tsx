@@ -3,6 +3,10 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import ListingChat from "@/components/ListingChat";
 import ServiceBookingBlock from "@/components/ServiceBookingBlock";
+import ServiceMenuPublic from "@/components/ServiceMenuPublic";
+import type { ServiceMenu } from "@/lib/listing-service-menu";
+import { effectiveServiceMenuForListing } from "@/lib/listing-service-menu";
+import { inferProviderSlugFromListingTitle } from "@/lib/infer-listing-provider-slug";
 import WhatsAppCTA from "@/components/WhatsAppCTA";
 import SellerReviews, { RatingSummary } from "@/components/SellerReviews";
 import ReportButton from "@/components/ReportButton";
@@ -19,6 +23,7 @@ import { listingTitle, listingDescription } from "@/lib/listing-language";
 import { formatUsdCents } from "@/lib/money";
 import { UsdCents } from "@/components/UsdAmount";
 import { fetchListingForDetailPage, fetchListingMetaRow } from "@/lib/listing-detail-fetch";
+import { distKmBetween, formatListingDistanceMi } from "@/lib/listing-distance";
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const supaUrl = getSupabaseUrl();
@@ -50,7 +55,7 @@ export default async function ListingPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams?: { chat?: string; lang?: string };
+  searchParams?: { chat?: string; lang?: string; lat?: string; lng?: string };
 }) {
   const supaUrl = getSupabaseUrl();
   const h = { ...getServiceRoleRestHeaders(), "Content-Type": "application/json" };
@@ -96,10 +101,39 @@ export default async function ListingPage({
   const sellerTrust = verificationPropsFromSellerRow(
     listing.users as Parameters<typeof verificationPropsFromSellerRow>[0]
   );
+  const providerSlug = isServiceListing ? inferProviderSlugFromListingTitle(String(listing.title_es ?? "")) : null;
+  const serviceMenu: ServiceMenu | null = isServiceListing
+    ? effectiveServiceMenuForListing(
+        (listing as { service_menu?: ServiceMenu | null }).service_menu ?? null,
+        providerSlug,
+      )
+    : null;
+  const loginReturnTo = `/listing/${params.id}${searchParams?.lang ? `?lang=${searchParams.lang}` : ""}${searchParams?.chat ? `${searchParams.lang ? "&" : "?"}chat=${searchParams.chat}` : ""}`;
+
+  const shopperLat = parseFloat(searchParams?.lat ?? "");
+  const shopperLng = parseFloat(searchParams?.lng ?? "");
+  const listingLat = Number(listing.location_lat);
+  const listingLng = Number(listing.location_lng);
+  const distanceLabel =
+    Number.isFinite(shopperLat) &&
+    Number.isFinite(shopperLng) &&
+    Number.isFinite(listingLat) &&
+    Number.isFinite(listingLng)
+      ? formatListingDistanceMi(
+          distKmBetween(shopperLat, shopperLng, listingLat, listingLng),
+          listingLang,
+        )
+      : null;
 
   return (
     <main className="min-h-screen bg-[#FDF8F1]">
       <div className="max-w-3xl mx-auto px-4 py-8">
+        {distanceLabel && (
+          <p className="mb-3 text-sm font-semibold text-[#1B4332] flex items-center gap-1.5">
+            <span aria-hidden>📍</span>
+            {distanceLabel}
+          </p>
+        )}
         {!listingActive && (
           <div
             className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
@@ -178,6 +212,12 @@ export default async function ListingPage({
 
         {displayDescription ? <p className="text-[#374151] leading-relaxed mb-6">{displayDescription}</p> : null}
 
+        {isServiceListing && serviceMenu && (
+          <div className="mb-6">
+            <ServiceMenuPublic menu={serviceMenu} lang={listingLang === "es" ? "es" : "en"} />
+          </div>
+        )}
+
         {/* Payment methods section — hidden until commission collection is enabled via Stripe */}
 
         {sellerId && (
@@ -217,6 +257,9 @@ export default async function ListingPage({
               listingId={params.id}
               isService={isServiceListing}
               sellerId={listing.seller_id ?? null}
+              listingLang={listingLang === "es" ? "es" : "en"}
+              providerSlug={providerSlug}
+              loginReturnTo={loginReturnTo}
             />
           </div>
         </div>

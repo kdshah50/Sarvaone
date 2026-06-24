@@ -8,6 +8,7 @@ import { ListingCard } from "@/lib/types";
 import { WhatsAppBadgeLocked } from "@/components/WhatsAppCTA";
 import { SellerVerificationBadges } from "@/components/SellerVerificationBadges";
 import { DEFAULT_LANG, langFromParam, listingHref, type Lang } from "@/lib/i18n-lang";
+import { formatListingDistanceMi } from "@/lib/listing-distance";
 import { UsdCents } from "@/components/UsdAmount";
 import { isServiceVerticalCategory, normalizeBrowseCategory } from "@/lib/marketplace-categories";
 
@@ -174,12 +175,23 @@ export default function ListingGrid({
 
   const negotiableHint = lang === "es" ? "· negociable" : "· negotiable";
 
+  const listingDetailHref = (listingId: string) => {
+    const base = listingHref(listingId, lang);
+    const lat = params.get("lat");
+    const lng = params.get("lng");
+    if (!lat || !lng) return base;
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`;
+  };
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-      {listings.map((listing) => (
+      {listings.map((listing) => {
+        const distanceLabel = formatListingDistanceMi(listing.dist_km, lang);
+        return (
         <Link
           key={listing.id}
-          href={listingHref(listing.id, lang)}
+          href={listingDetailHref(listing.id)}
           className="group block"
         >
           <div className="bg-white rounded-2xl overflow-hidden border border-[#E5E0D8] hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
@@ -197,11 +209,18 @@ export default function ListingGrid({
                   📦
                 </div>
               )}
-              {(listing.colonia_label || listing.location_city) && (
-                <span className="absolute top-2 left-2 text-[10px] font-medium px-2 py-1 rounded-full bg-white/90 text-[#374151] backdrop-blur-sm">
-                  📍 {listing.colonia_label ?? listing.location_city}
-                </span>
-              )}
+              <div className="absolute top-2 left-2 flex flex-wrap gap-1.5 max-w-[85%]">
+                {distanceLabel && (
+                  <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-[#1B4332]/90 text-white backdrop-blur-sm">
+                    📍 {distanceLabel}
+                  </span>
+                )}
+                {(listing.colonia_label || listing.location_city) && (
+                  <span className="text-[10px] font-medium px-2 py-1 rounded-full bg-white/90 text-[#374151] backdrop-blur-sm">
+                    {listing.colonia_label ?? listing.location_city}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="p-4">
@@ -237,7 +256,8 @@ export default function ListingGrid({
             </div>
           </div>
         </Link>
-      ))}
+        );
+      })}
     </div>
   );
 }

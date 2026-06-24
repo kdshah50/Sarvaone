@@ -24,6 +24,8 @@ export interface ListingCard {
   seller_phone_verified: boolean;
   /** Listing passed admin approval (is_verified) — fallback chip when seller flags missing. */
   listing_admin_verified?: boolean;
+  /** Distance from shopper/county reference (km); shown as miles in UI. */
+  dist_km?: number | null;
   payment_methods: string[] | null;
 }
 

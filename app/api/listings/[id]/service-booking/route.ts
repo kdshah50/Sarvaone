@@ -1,11 +1,112 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminSupabase, getUserIdFromRequest, isSameUserId } from "@/lib/auth-server";
+import { createAdminSupabase, getUserIdFromRequest, idMatchVariantsForIn } from "@/lib/auth-server";
 import { isServicesListing } from "@/lib/listing-category";
-import { buyerHasSentInAppMessage, ensureContactGateFromMessages } from "@/lib/contact-gate";
-import { computeCommissionCents } from "@/lib/stripe";
-import { effectiveListingPriceMxnCents, listingHasActivePackage } from "@/lib/package-pricing";
+import { buyerHasSentInAppMessage, ensureContactGateFromMessages, unlockContactGateIfRepeatBuyerWithSeller } from "@/lib/contact-gate";
+import { computeCommissionCents, MIN_COMMISSION_CENTS_USD } from "@/lib/stripe";
+import { getNextBookingDiscount } from "@/lib/loyalty";
+import {
+  effectiveListingPriceMxnCents,
+  listingHasActivePackage,
+  packageVsListSavings,
+} from "@/lib/package-pricing";
+import { checkoutBlockedByExistingPaidRows } from "@/lib/booking-checkout-guard";
+import { canonicalBookingRowIdKey, mergeBookingListRowsPreferTruth } from "@/lib/booking-list-merge";
+import { poolsOverlap, expandUserAccountIdPool, userIsListingSellerAccount } from "@/lib/user-account-pool";
+import { loadSellerConnectId } from "@/lib/marketplace-cart-server";
+import {
+  computeCartPricing,
+  applyLoyaltyDiscountToCartPricing,
+  marketplaceApplicationFeeCents,
+} from "@/lib/marketplace-cart-pricing";
+import {
+  resolveServicePricingBaseMxnCents,
+} from "@/lib/service-booking-pricing";
+import { applyServiceBookingStatusTruthPass } from "@/lib/booking-status-truth";
+import { inferProviderSlugFromListingTitle } from "@/lib/infer-listing-provider-slug";
+import { providerServiceRequiresQuoteAccept } from "@/lib/provider-services";
+import { loadServiceQuoteGateForBuyerPool, agreedGateFromQuoteRow } from "@/lib/service-quote-server";
 
 export const dynamic = "force-dynamic";
+
+const PAID_LISTING_MERGE_LIMIT = 60;
+
+type PaidRow = Record<string, unknown> & {
+  id: string;
+  buyer_id: string;
+  status?: string | null;
+  seller_phone_snapshot?: string | null;
+  paid_at?: string | null;
+  created_at?: string;
+  ticket_code?: string | null;
+};
+
+function cmpPaidRecent(a: PaidRow, b: PaidRow): number {
+  const pa = a.paid_at ? new Date(String(a.paid_at)).getTime() : 0;
+  const pb = b.paid_at ? new Date(String(b.paid_at)).getTime() : 0;
+  if (pb !== pa) return pb - pa;
+  return new Date(String(b.created_at ?? 0)).getTime() - new Date(String(a.created_at ?? 0)).getTime();
+}
+
+/**
+ * Same visibility as buyer GET /api/bookings: paid rows on this listing where merged buyer pools
+ * overlap (covers stale `buyer_id` after account linking).
+ */
+async function mergePaidBookingsForListingBuyer(
+  supabase: ReturnType<typeof createAdminSupabase>,
+  listingId: string,
+  myPool: string[],
+): Promise<PaidRow[]> {
+  const listVars = idMatchVariantsForIn(listingId);
+  if (listVars.length === 0 || myPool.length === 0) return [];
+
+  const cols =
+    "id,buyer_id,payment_status,seller_phone_snapshot,paid_at,status,package_session_count,ticket_code,created_at,updated_at";
+
+  const { data: byBuyer } = await supabase
+    .from("service_bookings")
+    .select(cols)
+    .in("listing_id", listVars)
+    .in("buyer_id", myPool)
+    .eq("payment_status", "paid")
+    .order("paid_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(PAID_LISTING_MERGE_LIMIT);
+
+  const { data: byListing } = await supabase
+    .from("service_bookings")
+    .select(cols)
+    .in("listing_id", listVars)
+    .eq("payment_status", "paid")
+    .order("paid_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(PAID_LISTING_MERGE_LIMIT);
+
+  const merged = new Map<string, PaidRow>();
+  for (const row of byBuyer ?? []) {
+    merged.set(canonicalBookingRowIdKey(row.id), row as PaidRow);
+  }
+
+  const poolCache = new Map<string, string[]>();
+  const rowBuyerPool = async (buyerId: string) => {
+    if (!poolCache.has(buyerId)) {
+      poolCache.set(buyerId, await expandUserAccountIdPool(supabase, String(buyerId)));
+    }
+    return poolCache.get(buyerId)!;
+  };
+
+  for (const row of byListing ?? []) {
+    const key = canonicalBookingRowIdKey(row.id);
+    const rowPool = await rowBuyerPool(String(row.buyer_id));
+    if (!poolsOverlap(rowPool, myPool)) continue;
+    const prev = merged.get(key);
+    if (!prev) merged.set(key, row as PaidRow);
+    else merged.set(key, mergeBookingListRowsPreferTruth(prev, row as PaidRow) as PaidRow);
+  }
+
+  return [...merged.values()].sort(cmpPaidRecent);
+}
+
+const jsonNoStore = { "Cache-Control": "private, no-store, max-age=0" as const };
 
 async function loadListing(supabase: ReturnType<typeof createAdminSupabase>, listingId: string) {
   const { data, error } = await supabase
@@ -41,7 +142,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       });
     }
 
-    if (sellerId && isSameUserId(userId, sellerId)) {
+    if (sellerId && (await userIsListingSellerAccount(supabase, userId, sellerId))) {
       return NextResponse.json({
         isService: isServicesCategory,
         isSeller: true,
@@ -51,11 +152,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       });
     }
 
+    const myPool = await expandUserAccountIdPool(supabase, userId);
+
+    const slug = inferProviderSlugFromListingTitle(String(listing.title_es ?? ""));
+    const requiresQuoteAccept = providerServiceRequiresQuoteAccept(slug);
+    const quoteGate = requiresQuoteAccept
+      ? await loadServiceQuoteGateForBuyerPool(supabase, listingId, myPool)
+      : null;
+
     const { data: gate } = await supabase
       .from("listing_service_contact_gate")
-      .select("contacted_in_app")
+      .select("contacted_in_app,agreed_subtotal_mxn_cents,seller_set_agreed_price_at")
       .eq("listing_id", listingId)
-      .eq("buyer_id", userId)
+      .in("buyer_id", myPool)
       .maybeSingle();
 
     let contactedInApp = Boolean(gate?.contacted_in_app);
@@ -66,37 +175,57 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         await ensureContactGateFromMessages(supabase, listingId, userId);
       }
     }
+    if (!contactedInApp && sellerId) {
+      const unlocked = await unlockContactGateIfRepeatBuyerWithSeller(
+        supabase,
+        listingId,
+        userId,
+        String(sellerId),
+        myPool
+      );
+      if (unlocked) contactedInApp = true;
+    }
 
     const hasContacted = contactedInApp;
 
-    const { data: paidBookings } = await supabase
-      .from("service_bookings")
-      .select("id,payment_status,seller_phone_snapshot,paid_at")
-      .eq("listing_id", listingId)
-      .eq("buyer_id", userId)
-      .eq("payment_status", "paid")
-      .order("paid_at", { ascending: false })
-      .limit(1);
+    const { data: listingPricing } = await supabase
+      .from("listings")
+      .select("price_mxn,commission_pct,package_session_count,package_total_price_mxn")
+      .eq("id", listingId)
+      .maybeSingle();
 
-    const latestPaid = paidBookings?.[0] ?? null;
+    const hasPackage = listingHasActivePackage({
+      package_session_count: listingPricing?.package_session_count,
+      package_total_price_mxn: listingPricing?.package_total_price_mxn,
+    });
+
+    const paidRowsRaw = await mergePaidBookingsForListingBuyer(supabase, listingId, myPool);
+    const paidRows = await applyServiceBookingStatusTruthPass(supabase, paidRowsRaw);
+    const latestPaid = paidRows[0] ?? null;
+    const checkoutBlocked = checkoutBlockedByExistingPaidRows(
+      paidRows.map((r) => ({ status: r.status ?? null })),
+    );
 
     let revealedPhone: string | null = null;
     let revealedWhatsappUrl: string | null = null;
     if (latestPaid) {
-      revealedPhone = latestPaid.seller_phone_snapshot;
-      if (!revealedPhone) {
+      const snap = latestPaid.seller_phone_snapshot;
+      revealedPhone = typeof snap === "string" ? snap : null;
+      if (!revealedPhone && listing.seller_id) {
+        const sellerIdVars = idMatchVariantsForIn(String(listing.seller_id));
         const { data: sellerUser } = await supabase
           .from("users")
           .select("phone")
-          .eq("id", listing.seller_id)
+          .in("id", sellerIdVars)
+          .limit(1)
           .maybeSingle();
         revealedPhone = sellerUser?.phone ?? null;
       }
       if (revealedPhone) {
         const digits = revealedPhone.replace(/\D/g, "");
         const waIntro = isServicesCategory
-          ? `Hi! I booked your service "${listing.title_es}" on AISaravanna.`
-          : `Hi! I saw your listing "${listing.title_es}" on AISaravanna and completed contact in the app.`;
+          ? `Hola! Ya reservé tu servicio "${listing.title_es}" en Naranjogo.`
+          : `Hola! Vi tu anuncio "${listing.title_es}" en Naranjogo y ya completé el contacto por la app.`;
         revealedWhatsappUrl = `https://wa.me/${digits}?text=${encodeURIComponent(waIntro)}`;
       }
     }
@@ -105,48 +234,154 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       .from("service_bookings")
       .select("id,stripe_checkout_session_id")
       .eq("listing_id", listingId)
-      .eq("buyer_id", userId)
+      .in("buyer_id", myPool)
       .eq("payment_status", "pending")
       .order("created_at", { ascending: false })
       .limit(1);
 
     const pendingBooking = pendingBookings?.[0] ?? null;
 
-    const { data: listingPricing } = await supabase
-      .from("listings")
-      .select("price_mxn,commission_pct,package_session_count,package_total_price_mxn")
-      .eq("id", listingId)
-      .maybeSingle();
-
     const commPct = Number(listingPricing?.commission_pct ?? 10);
-    const base = effectiveListingPriceMxnCents({
+    const listingPricingRow = {
       price_mxn: Number(listingPricing?.price_mxn) || 0,
       package_session_count: listingPricing?.package_session_count,
       package_total_price_mxn: listingPricing?.package_total_price_mxn,
+    };
+    const listingBaseMxnCents = effectiveListingPriceMxnCents(listingPricingRow);
+    const gateForPricing =
+      agreedGateFromQuoteRow(quoteGate) ??
+      (gate?.seller_set_agreed_price_at != null && gate?.agreed_subtotal_mxn_cents != null
+        ? {
+            agreed_subtotal_mxn_cents: Number(gate.agreed_subtotal_mxn_cents),
+            seller_set_agreed_price_at: String(gate.seller_set_agreed_price_at),
+          }
+        : null);
+    const pricingBaseMxnCents = resolveServicePricingBaseMxnCents({
+      listing: listingPricingRow,
+      gate: gateForPricing,
     });
-    const commCents = computeCommissionCents(base, commPct);
-    const hasPackage = listingHasActivePackage({
-      package_session_count: listingPricing?.package_session_count,
-      package_total_price_mxn: listingPricing?.package_total_price_mxn,
-    });
+    let commCents = computeCommissionCents(pricingBaseMxnCents, commPct);
+    if (!Number.isFinite(commCents) || commCents < MIN_COMMISSION_CENTS_USD) {
+      commCents = MIN_COMMISSION_CENTS_USD;
+    }
 
-    return NextResponse.json({
-      isService: isServicesCategory,
-      flowActive: true,
-      canBook: hasContacted,
-      contactedInApp,
-      hasPaidBooking: !!latestPaid,
-      paidBookingId: latestPaid?.id ?? null,
-      revealedPhone,
-      revealedWhatsappUrl,
-      hasPendingBooking: !!pendingBooking,
-      pendingBookingId: pendingBooking?.id ?? null,
-      commissionAmountCents: commCents,
-      commissionPct: commPct,
-      hasPackage,
-      packageSessionCount: hasPackage ? listingPricing?.package_session_count : null,
-      packageTotalMxnCents: hasPackage ? listingPricing?.package_total_price_mxn : null,
-    });
+    let commissionBeforeLoyaltyCents: number | null = null;
+    let loyaltyDiscountPctApplied: number | null = null;
+    let loyaltyDiscountCents: number | null = null;
+    try {
+      const reward = await getNextBookingDiscount(supabase, userId);
+      if (reward.discountPct > 0) {
+        commissionBeforeLoyaltyCents = commCents;
+        loyaltyDiscountPctApplied = reward.discountPct;
+        loyaltyDiscountCents = Math.round(commCents * reward.discountPct / 100);
+        commCents = Math.max(commCents - loyaltyDiscountCents, MIN_COMMISSION_CENTS_USD);
+      }
+    } catch (loyaltyErr) {
+      console.error("[service-booking] loyalty preview failed (non-fatal)", loyaltyErr);
+    }
+
+    const pkgSavings =
+      hasPackage && listingPricing
+        ? packageVsListSavings({
+            price_mxn: Number(listingPricing.price_mxn) || 0,
+            package_session_count: listingPricing.package_session_count,
+            package_total_price_mxn: listingPricing.package_total_price_mxn,
+          })
+        : null;
+
+    const sellerConnectReady =
+      sellerId != null ? Boolean(await loadSellerConnectId(supabase, String(sellerId))) : false;
+
+    const agreedSubtotalMxnCents =
+      quoteGate?.agreedSubtotalMxnCents != null && quoteGate.agreedSubtotalMxnCents >= 100
+        ? quoteGate.agreedSubtotalMxnCents
+        : gateForPricing?.agreed_subtotal_mxn_cents != null
+          ? Number(gateForPricing.agreed_subtotal_mxn_cents)
+          : null;
+    const usingAgreedPrice =
+      agreedSubtotalMxnCents != null &&
+      Number.isFinite(agreedSubtotalMxnCents) &&
+      pricingBaseMxnCents === Math.round(agreedSubtotalMxnCents);
+
+    let fullConnectPreview:
+      | {
+          subtotalCents: number;
+          commissionCents: number;
+          vatCents: number;
+          totalCents: number;
+          vatPercent: number;
+          applicationFeeCents: number;
+        }
+      | null = null;
+    if (sellerConnectReady && pricingBaseMxnCents > 0) {
+      let cartP = computeCartPricing([
+        {
+          listingId,
+          qty: 1,
+          unitPriceMxnCents: pricingBaseMxnCents,
+          commissionPct: commPct,
+          titleEs: String(listing.title_es ?? ""),
+        },
+      ]);
+      if (loyaltyDiscountPctApplied != null && loyaltyDiscountPctApplied > 0) {
+        cartP = applyLoyaltyDiscountToCartPricing(cartP, loyaltyDiscountPctApplied);
+      }
+      fullConnectPreview = {
+        subtotalCents: cartP.subtotalCents,
+        commissionCents: cartP.commissionCents,
+        vatCents: cartP.vatCents,
+        totalCents: cartP.totalCents,
+        vatPercent: cartP.vatPercent,
+        applicationFeeCents: marketplaceApplicationFeeCents(cartP),
+      };
+    }
+
+    const quoteStatus = quoteGate?.quoteStatus ?? "none";
+    const canPayDeposit = requiresQuoteAccept ? quoteStatus === "accepted" : true;
+    const quoteAwaitingProvider =
+      requiresQuoteAccept &&
+      quoteStatus === "none" &&
+      (quoteGate?.quoteLineItems?.length ?? 0) > 0;
+
+    return NextResponse.json(
+      {
+        isService: isServicesCategory,
+        flowActive: true,
+        canBook: hasContacted,
+        contactedInApp,
+        requiresQuoteAccept,
+        quoteStatus,
+        quoteSentAt: quoteGate?.quoteSentAt ?? null,
+        quoteRespondedAt: quoteGate?.quoteRespondedAt ?? null,
+        quoteAwaitingProvider,
+        canPayDeposit,
+        checkoutBlocked,
+        paidBookingId: latestPaid?.id ?? null,
+        paidBookingStatus: latestPaid ? (String(latestPaid.status ?? "confirmed")) : null,
+        ticketCode: latestPaid?.ticket_code != null ? String(latestPaid.ticket_code) : null,
+        revealedWhatsappUrl,
+        hasPendingBooking: !!pendingBooking,
+        pendingBookingId: pendingBooking?.id ?? null,
+        commissionAmountCents: commCents,
+        commissionBeforeLoyaltyCents,
+        loyaltyDiscountPctApplied,
+        loyaltyDiscountCents,
+        commissionPct: commPct,
+        hasPackage,
+        packageSessionCount: hasPackage ? listingPricing?.package_session_count : null,
+        packageTotalMxnCents: hasPackage ? listingPricing?.package_total_price_mxn : null,
+        packageSavingsPctApprox: pkgSavings?.savingsPctApprox ?? null,
+        packageSavingsMxnCents: pkgSavings?.savingsCents ?? null,
+        listingPricingBaseMxnCents: listingBaseMxnCents,
+        pricingBaseMxnCents,
+        agreedSubtotalMxnCents: agreedSubtotalMxnCents,
+        sellerAgreedPriceAt: gateForPricing?.seller_set_agreed_price_at ?? null,
+        usingAgreedPrice,
+        sellerConnectReady,
+        fullConnectPreview,
+      },
+      { headers: jsonNoStore },
+    );
   } catch (e) {
     console.error("[service-booking] GET", e);
     return NextResponse.json({ error: "Error del servidor" }, { status: 500 });
@@ -175,7 +410,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!sellerId) {
       return NextResponse.json({ error: "Anuncio sin proveedor" }, { status: 400 });
     }
-    if (isSameUserId(sellerId, userId)) {
+    if (await userIsListingSellerAccount(supabase, userId, sellerId)) {
       return NextResponse.json({ error: "No puedes reservar tu propio anuncio" }, { status: 400 });
     }
 
@@ -184,6 +419,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     if (action === "request") {
+      const myPool = await expandUserAccountIdPool(supabase, userId);
       const note = String((json as { note?: string }).note ?? "").trim();
       if (!note || note.length > 2000) {
         return NextResponse.json({ error: "Describe tu solicitud (1–2000 caracteres)" }, { status: 400 });
@@ -199,7 +435,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         .from("listing_service_contact_gate")
         .select("contacted_in_app")
         .eq("listing_id", listingId)
-        .eq("buyer_id", userId)
+        .in("buyer_id", myPool)
         .maybeSingle();
 
       let contactedInApp = Boolean(gate?.contacted_in_app);

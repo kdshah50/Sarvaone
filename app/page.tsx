@@ -9,6 +9,8 @@ import {
   CountyServiceCatalogSection,
   type CountyServiceCatalogRow,
 } from "@/components/home/CountyServiceCatalogSection";
+import { ConciergeSearchHint } from "@/components/home/ConciergeSearchHint";
+import type { ConciergeRequest } from "@/lib/concierge-intent";
 import { COLONIAS, COLONIA_RADIUS_KM, nearestColonia } from "@/lib/colonias";
 import { getServerFetchOrigin } from "@/lib/app-url";
 import { getServiceRoleRestHeaders, getSupabaseUrl } from "@/lib/service-rest";
@@ -44,7 +46,7 @@ async function countyServiceCatalogRowsForKey(
   const supaUrl = getSupabaseUrl();
   const catPath =
     `/rest/v1/county_service_catalog?county_key=eq.${encodeURIComponent(countyKey)}&active=eq.true` +
-    `&select=service_slug,label_en,label_es,blurb_en,blurb_es,strategy_tag&order=sort_order.asc`;
+    `&select=service_slug,label_en,label_es,blurb_en,blurb_es,strategy_tag`;
   const catRes = await fetch(`${supaUrl}${catPath}`, { headers: supaHeaders, cache: "no-store" });
   if (!catRes.ok) return [];
   const raw = await catRes.json();
@@ -121,14 +123,16 @@ export default async function HomePage({ searchParams }: Props) {
     }
   }
 
-  const refLat = hasGeo ? userLat : NJ_LAT;
-  const refLng = hasGeo ? userLng : NJ_LNG;
+  const refLat = hasGeo ? userLat : (coloniaData?.lat ?? NJ_LAT);
+  const refLng = hasGeo ? userLng : (coloniaData?.lng ?? NJ_LNG);
 
   const zipForSearchApi = normalizeUsZip5(searchParams?.zip ?? "") ?? detectZipInQuery(query)?.zip;
 
   let cards: any[] = [];
   let searchMode = "sparse";
   let countyCatalog: CountyServiceCatalogRow[] = [];
+  let searchConcierge: ConciergeRequest | null = null;
+  let searchCategoryHint: string | null = null;
 
   try {
     const supaHeaders = getServiceRoleRestHeaders();
@@ -152,6 +156,11 @@ export default async function HomePage({ searchParams }: Props) {
       if (res.ok) {
         const data = await res.json();
         searchMode = data.mode ?? "sparse";
+        searchConcierge = (data.concierge as ConciergeRequest | null) ?? data.debug?.parse?.concierge ?? null;
+        searchCategoryHint =
+          (typeof data.searchCategoryHint === "string" ? data.searchCategoryHint : null) ??
+          data.debug?.parse?.searchCategoryHint ??
+          null;
         const detectedColonia = data.colonia ?? null;
         cards = (data.results ?? []).map((row: any) => {
           const rLat = row.location_lat ?? NJ_LAT;
@@ -186,6 +195,7 @@ export default async function HomePage({ searchParams }: Props) {
             listing_admin_verified: Boolean(row.is_verified),
             payment_methods: row.payment_methods ?? null,
             _dist_km: row._dist_km ?? null,
+            dist_km: row._dist_km ?? null,
             _mode: row._mode,
           };
         });
@@ -279,6 +289,7 @@ export default async function HomePage({ searchParams }: Props) {
             listing_admin_verified: Boolean(row.is_verified),
             payment_methods: row.payment_methods ?? null,
             _dist_km: Math.round(km * 10) / 10,
+            dist_km: Math.round(km * 10) / 10,
           };
         }).sort((a: any, b: any) => a._dist_km - b._dist_km);
       } else {
@@ -318,6 +329,21 @@ export default async function HomePage({ searchParams }: Props) {
                 items={countyCatalog}
               />
             )}
+          {query.trim() && (
+            <ConciergeSearchHint
+              lang={lang}
+              query={query}
+              concierge={searchConcierge}
+              searchCategoryHint={searchCategoryHint}
+            />
+          )}
+        </Suspense>
+        <div id="listing-results">
+        <Suspense
+          fallback={
+            <div className="h-32 mb-6 rounded-xl bg-[#F4F0EB] animate-pulse" aria-hidden />
+          }
+        >
           <HomeListHeading
             initialLang={initialLang}
             initialCategory={categorySlug}
@@ -343,6 +369,7 @@ export default async function HomePage({ searchParams }: Props) {
             devPendingServicesEnabled={devPendingServices}
           />
         </Suspense>
+        </div>
       </section>
       <TrustBar />
     </main>

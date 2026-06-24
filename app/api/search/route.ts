@@ -551,6 +551,8 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     results, mode, query, total: results.length, debug,
+    concierge: conciergeEffective ?? null,
+    searchCategoryHint: effective.searchCategoryHint ?? null,
     colonia: coloniaRef
       ? { key: effectiveColoniaSlug, label: coloniaRef.label }
       : null,

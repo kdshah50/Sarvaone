@@ -170,6 +170,14 @@ export const COLONIA_KEYS = Object.keys(COLONIAS).filter((k) => k !== "otro");
 
 export const ALL_COLONIA_KEYS = Object.keys(COLONIAS);
 
+/** NJ county keys sorted A→Z by localized display label (Hero county chips). */
+export function coloniaKeysSorted(lang: Lang = "en"): string[] {
+  const locale = lang === "es" ? "es" : "en";
+  return [...COLONIA_KEYS].sort((a, b) =>
+    coloniaLabel(a, lang).localeCompare(coloniaLabel(b, lang), locale, { sensitivity: "base" }),
+  );
+}
+
 export function coloniaLabel(key: string, lang: Lang = "en"): string {
   const c = COLONIAS[key];
   if (!c) return key;

@@ -2,9 +2,16 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { langFromParam } from "@/lib/i18n-lang";
-import { UsdCents } from "@/components/UsdAmount";
+import type { UiLang } from "@/lib/i18n-lang";
+import { intlLocale } from "@/lib/i18n-lang";
+import {
+  quoteAwaitingProviderLine,
+  quoteSendRequestLine,
+  serviceDepositConfirmLine,
+} from "@/lib/service-quote-vertical";
+import ServiceQuoteBuyerPanel from "@/components/ServiceQuoteBuyerPanel";
+import { serviceBookingCopy } from "@/lib/service-booking-copy";
+import HousekeepingBookingPayments from "@/components/HousekeepingBookingPayments";
 
 type BookingState = {
   isService: boolean;
@@ -14,18 +21,72 @@ type BookingState = {
   isSeller?: boolean;
   canBook: boolean;
   contactedInApp: boolean;
-  hasPaidBooking: boolean;
+  /** True while a new Stripe checkout for this listing is not allowed (active paid row, or package already paid). */
+  checkoutBlocked: boolean;
   paidBookingId: string | null;
-  revealedPhone: string | null;
   revealedWhatsappUrl: string | null;
   hasPendingBooking: boolean;
   pendingBookingId: string | null;
   commissionAmountCents: number;
+  /** Pre-loyalty fee when a loyalty discount applies (for strikethrough UI). */
+  commissionBeforeLoyaltyCents?: number | null;
+  loyaltyDiscountPctApplied?: number | null;
+  loyaltyDiscountCents?: number | null;
   commissionPct: number;
   hasPackage?: boolean;
   packageSessionCount?: number | null;
   packageTotalMxnCents?: number | null;
+  packageSavingsPctApprox?: number | null;
+  packageSavingsMxnCents?: number | null;
+  /** Latest paid booking lifecycle (for polling + buyer UI). */
+  paidBookingStatus?: string | null;
+  ticketCode?: string | null;
+  listingPricingBaseMxnCents?: number;
+  pricingBaseMxnCents?: number;
+  agreedSubtotalMxnCents?: number | null;
+  sellerAgreedPriceAt?: string | null;
+  usingAgreedPrice?: boolean;
+  sellerConnectReady?: boolean;
+  requiresQuoteAccept?: boolean;
+  quoteStatus?: string | null;
+  quoteSentAt?: string | null;
+  quoteAwaitingProvider?: boolean;
+  canPayDeposit?: boolean;
+  fullConnectPreview?: {
+    subtotalCents: number;
+    commissionCents: number;
+    vatCents: number;
+    totalCents: number;
+    vatPercent: number;
+    applicationFeeCents: number;
+  } | null;
 };
+
+function formatMXN(cents: number, lang: UiLang): string {
+  return new Intl.NumberFormat(intlLocale(lang), {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+function paidBookingStatusCaption(status: string | null | undefined, lang: UiLang): string {
+  const s = String(status ?? "confirmed").toLowerCase();
+  if (lang === "en") {
+    if (s === "scheduled") return "Provider marked your visit as scheduled";
+    if (s === "in_progress") return "Provider marked this job in progress";
+    if (s === "completed") return "Provider marked this service completed";
+    if (s === "cancelled") return "Booking cancelled";
+    if (s === "pending") return "Payment processing";
+    return "Paid — awaiting next update from provider";
+  }
+  if (s === "scheduled") return "El proveedor marcó tu visita como agendada";
+  if (s === "in_progress") return "El proveedor marcó el trabajo en curso";
+  if (s === "completed") return "El proveedor marcó el servicio como completado";
+  if (s === "cancelled") return "Reserva cancelada";
+  if (s === "pending") return "Procesando pago";
+  return "Pagado — esperando actualización del proveedor";
+}
 
 /** Match auth-server: JWT sub is lowercased; `users.id` in DB can differ in letter case. */
 function sameUserId(a: string | null | undefined, b: string | null | undefined) {
@@ -37,22 +98,45 @@ export default function ServiceBookingBlock({
   listingId,
   isService,
   sellerId,
+  listingLang = "en",
+  providerSlug = null,
+  liveAvailability,
+  loginReturnTo,
 }: {
   listingId: string;
   isService: boolean;
   sellerId: string | null;
+  /** From listing page `?lang=` — affects booking note copy only. */
+  listingLang?: UiLang;
+  providerSlug?: string | null;
+  /** When the listing shows synced / live openings (informational; flow unchanged). */
+  liveAvailability?: { syncEnabled: boolean; upcomingSlotCount: number };
+  /** Full listing URL for post-login redirect (preserve `?lang=` / `?chat=`). */
+  loginReturnTo?: string;
 }) {
-  const searchParams = useSearchParams();
-  const lang = langFromParam(searchParams.get("lang"));
   const [meId, setMeId] = useState<string | null | undefined>(undefined);
   const [booking, setBooking] = useState<BookingState | null>(null);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [loyaltyHint, setLoyaltyHint] = useState<{ bookingsUntil: number; discountPct: number } | null>(null);
+  const [loyaltyHint, setLoyaltyHint] = useState<{
+    bookingsUntil: number;
+    discountPct: number;
+    rebookDiscount?: boolean;
+    milestoneDiscount?: boolean;
+    rebookDiscountPct?: number;
+    milestoneDiscountPct?: number;
+    everyN?: number;
+  } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const prevContacted = useRef(false);
+  /** Buyer checkout: default tarifa sola; optional pago completo si el proveedor tiene Connect. */
+  const [checkoutMode, setCheckoutMode] = useState<"commission_only" | "full_connect">("commission_only");
+  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "wallet">("stripe");
+  const [walletBalanceCents, setWalletBalanceCents] = useState<number | null>(null);
+  const [walletEnabled, setWalletEnabled] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(false);
 
   const load = useCallback(async () => {
     setMsg("");
@@ -64,9 +148,29 @@ export default function ServiceBookingBlock({
       setMeId(null);
     }
 
-    const res = await fetch(`/api/listings/${listingId}/service-booking`, { credentials: "same-origin" });
-    const data = res.ok ? await res.json() : null;
-    setBooking(data as BookingState | null);
+    const res = await fetch(`/api/listings/${listingId}/service-booking`, {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    let data = res.ok ? ((await res.json()) as BookingState) : null;
+    const paidId = data?.paidBookingId;
+    const paidSt = String(data?.paidBookingStatus ?? "").toLowerCase();
+    if (paidId && paidSt !== "completed" && paidSt !== "cancelled") {
+      try {
+        const detail = await fetch(`/api/bookings/${encodeURIComponent(paidId)}`, {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        if (detail.ok) {
+          const row = (await detail.json()) as { status?: string };
+          const st = String(row.status ?? "").trim();
+          if (st && data) data = { ...data, paidBookingStatus: st };
+        }
+      } catch {
+        /* non-fatal */
+      }
+    }
+    setBooking(data);
     setLoading(false);
 
     // Fetch loyalty info (non-blocking)
@@ -77,6 +181,11 @@ export default function ServiceBookingBlock({
           setLoyaltyHint({
             bookingsUntil: d.reward.bookingsUntilReward,
             discountPct: d.reward.discountPct,
+            rebookDiscount: d.reward.rebookDiscount,
+            milestoneDiscount: d.reward.milestoneDiscount,
+            rebookDiscountPct: d.reward.rebookDiscountPct,
+            milestoneDiscountPct: d.reward.milestoneDiscountPct,
+            everyN: d.reward.everyN,
           });
         }
       })
@@ -89,11 +198,36 @@ export default function ServiceBookingBlock({
 
   useEffect(() => {
     const onContact = () => void load();
+    const onPaid = () => void load();
+    const onLifecycle = (ev: Event) => {
+      const d = (ev as CustomEvent<{ listingId?: string }>).detail;
+      if (d?.listingId && String(d.listingId) !== String(listingId)) return;
+      void load();
+    };
     window.addEventListener("tianguis:listing-contact", onContact);
-    return () => window.removeEventListener("tianguis:listing-contact", onContact);
-  }, [load]);
+    window.addEventListener("tianguis:booking-paid", onPaid);
+    window.addEventListener("tianguis:booking-lifecycle", onLifecycle);
+    const onAgreed = (ev: Event) => {
+      const d = (ev as CustomEvent<{ listingId?: string }>).detail;
+      if (d?.listingId && String(d.listingId) !== String(listingId)) return;
+      void load();
+    };
+    window.addEventListener("tianguis:agreed-price-updated", onAgreed);
+    const onQuote = (ev: Event) => {
+      const d = (ev as CustomEvent<{ listingId?: string }>).detail;
+      if (d?.listingId && String(d.listingId) !== String(listingId)) return;
+      void load();
+    };
+    window.addEventListener("tianguis:quote-updated", onQuote);
+    return () => {
+      window.removeEventListener("tianguis:listing-contact", onContact);
+      window.removeEventListener("tianguis:booking-paid", onPaid);
+      window.removeEventListener("tianguis:booking-lifecycle", onLifecycle);
+      window.removeEventListener("tianguis:agreed-price-updated", onAgreed);
+      window.removeEventListener("tianguis:quote-updated", onQuote);
+    };
+  }, [load, listingId]);
 
-  // Refetch when user returns to the tab (fixes stale state after sending a message)
   useEffect(() => {
     const onVis = () => {
       if (document.visibilityState === "visible") void load();
@@ -102,16 +236,121 @@ export default function ServiceBookingBlock({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [load]);
 
+  /**
+   * Buyers rarely receive `tianguis:booking-lifecycle` (seller dashboard dispatches it). Poll while
+   * checkout is blocked, payment is pending, or the latest paid booking is still in progress so
+   * ticket codes and seller-driven status updates appear without a full page refresh.
+   */
+  useEffect(() => {
+    if (!booking?.flowActive) return;
+    const st = String(booking.paidBookingStatus ?? "");
+    const activePaidLifecycle =
+      Boolean(booking.paidBookingId) && st !== "completed" && st !== "cancelled";
+    const quotePending = String(booking.quoteStatus ?? "") === "pending";
+    const shouldPoll = Boolean(
+      booking.checkoutBlocked || booking.hasPendingBooking || activePaidLifecycle || quotePending,
+    );
+    if (!shouldPoll) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void load();
+    }, 8_000);
+    return () => window.clearInterval(id);
+  }, [
+    load,
+    booking?.flowActive,
+    booking?.checkoutBlocked,
+    booking?.hasPendingBooking,
+    booking?.paidBookingId,
+    booking?.paidBookingStatus,
+    booking?.quoteStatus,
+  ]);
+
+  useEffect(() => {
+    if (!booking?.sellerConnectReady || !booking?.fullConnectPreview || booking?.requiresQuoteAccept) {
+      setCheckoutMode("commission_only");
+    }
+  }, [booking?.sellerConnectReady, booking?.fullConnectPreview, booking?.requiresQuoteAccept]);
+
+  useEffect(() => {
+    if (checkoutMode !== "commission_only") {
+      setPaymentMethod("stripe");
+    }
+  }, [checkoutMode]);
+
+  useEffect(() => {
+    const contacted = Boolean(booking?.contactedInApp);
+    const hasPaid = Boolean(booking?.checkoutBlocked);
+    const requiresQuote = Boolean(booking?.requiresQuoteAccept);
+    const canPayDeposit = booking?.canPayDeposit !== false;
+    const quoteBlocksPay = requiresQuote && !canPayDeposit && !hasPaid;
+    const showPay = contacted && !hasPaid && !quoteBlocksPay;
+
+    if (!showPay || checkoutMode !== "commission_only" || !meId) {
+      setWalletEnabled(false);
+      setWalletBalanceCents(null);
+      return;
+    }
+
+    let cancelled = false;
+    setWalletLoading(true);
+    void fetch("/api/rides/wallet", { credentials: "same-origin", cache: "no-store" })
+      .then(async (r) => {
+        if (r.status === 404) {
+          if (!cancelled) {
+            setWalletEnabled(false);
+            setWalletBalanceCents(null);
+          }
+          return;
+        }
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          if (!cancelled) {
+            setWalletEnabled(false);
+            setWalletBalanceCents(null);
+          }
+          return;
+        }
+        if (!cancelled) {
+          setWalletEnabled(true);
+          setWalletBalanceCents(Number(data?.wallet?.balance_mxn_cents ?? 0));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWalletEnabled(false);
+          setWalletBalanceCents(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setWalletLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    booking?.contactedInApp,
+    booking?.checkoutBlocked,
+    booking?.requiresQuoteAccept,
+    booking?.canPayDeposit,
+    checkoutMode,
+    meId,
+  ]);
+
+  /** Server uses merged account (phone) to detect seller; client id match is fallback. */
+  const iAmSellerOnThisListing = Boolean(booking?.isSeller) || Boolean(sellerId && meId && sameUserId(meId, sellerId));
+
   // When step 1 completes, scroll the pay section into view (buyers only — not the seller on their own ad)
   useEffect(() => {
-    if (sellerId && meId && sameUserId(meId, sellerId)) return;
+    if (iAmSellerOnThisListing) return;
     const contacted = Boolean(booking?.contactedInApp);
     if (contacted && !prevContacted.current) {
       const el = document.getElementById("booking-section");
       el?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
     prevContacted.current = contacted;
-  }, [booking?.contactedInApp, meId, sellerId]);
+  }, [booking?.contactedInApp, booking?.isSeller, iAmSellerOnThisListing, meId, sellerId]);
 
   const manualRefresh = async () => {
     setRefreshing(true);
@@ -131,15 +370,23 @@ export default function ServiceBookingBlock({
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listingId, note: note.trim() || undefined }),
+        body: JSON.stringify({
+          listingId,
+          note: note.trim() || undefined,
+          checkoutMode,
+          paymentMethod,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
         const detail = typeof (data as { detail?: string }).detail === "string" ? (data as { detail: string }).detail : "";
-        const err = (data as { error?: string }).error ?? "Error al crear pago";
-        throw new Error(detail ? `${err} ${detail}` : err);
+        const serverMsg = typeof (data as { message?: string }).message === "string" ? (data as { message: string }).message : "";
+        const err = (data as { error?: string }).error ?? serviceBookingCopy(listingLang).checkoutErr;
+        throw new Error(serverMsg || (detail ? `${err} ${detail}` : err));
       }
-      if (data.url) {
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+      } else if (data.url) {
         window.location.href = data.url;
       }
     } catch (e: unknown) {
@@ -149,23 +396,21 @@ export default function ServiceBookingBlock({
     }
   };
 
+  const sb = serviceBookingCopy(listingLang);
+
   if (loading || meId === undefined) {
     return (
       <div className="rounded-xl border border-[#E5E0D8] bg-white p-4 text-sm text-[#6B7280]">
-        Cargando reservas…
+        {sb.loading}
       </div>
     );
   }
 
-  if (sellerId && meId && sameUserId(meId, sellerId)) {
+  if (iAmSellerOnThisListing) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <p className="font-semibold mb-1">{isService ? "Tu servicio" : "Tu anuncio"}</p>
-        <p className="text-amber-800">
-          {isService
-            ? "Los clientes deben escribirte por mensajes en la app y pagar la tarifa de servicio antes de recibir tu número de contacto."
-            : "Los compradores deben escribirte por la app y pagar la tarifa de conexión antes de recibir tu WhatsApp o teléfono."}
-        </p>
+        <p className="font-semibold mb-1">{isService ? sb.yourService : sb.yourListing}</p>
+        <p className="text-amber-800">{isService ? sb.sellerServiceLead : sb.sellerGoodsLead}</p>
       </div>
     );
   }
@@ -174,18 +419,16 @@ export default function ServiceBookingBlock({
     return (
       <div className="rounded-xl border border-[#E5E0D8] bg-[#F4F0EB] p-4">
         <p className="text-sm font-semibold text-[#1C1917] mb-2">
-          {isService ? "Reservar este servicio" : "Contactar al vendedor"}
+          {isService ? sb.loginTitleService : sb.loginTitleGoods}
         </p>
         <p className="text-xs text-[#6B7280] mb-3">
-          {isService
-            ? "Inicia sesión, platica con el proveedor y paga la tarifa de servicio para obtener su contacto directo."
-            : "Inicia sesión, envía un mensaje en la app y paga la tarifa de conexión para desbloquear WhatsApp."}
+          {isService ? sb.loginLeadService : sb.loginLeadGoods}
         </p>
         <Link
-          href={`/auth/login?returnTo=${encodeURIComponent(`/listing/${listingId}`)}`}
+          href={`/auth/login?returnTo=${encodeURIComponent(loginReturnTo ?? `/listing/${listingId}`)}`}
           className="inline-block px-4 py-2 rounded-xl bg-[#1B4332] text-white text-sm font-semibold"
         >
-          Iniciar sesión para continuar
+          {sb.loginBtn}
         </Link>
       </div>
     );
@@ -195,50 +438,121 @@ export default function ServiceBookingBlock({
 
   const contacted = booking.contactedInApp;
   const partyLabel = isService ? "proveedor" : "vendedor";
-  const hasPaid = booking.hasPaidBooking;
+  const hasPaid = booking.checkoutBlocked;
+  const requiresQuote = Boolean(booking.requiresQuoteAccept);
+  const quoteStatus = String(booking.quoteStatus ?? "none");
+  const canPayDeposit = booking.canPayDeposit !== false;
+  const quoteBlocksPay = requiresQuote && !canPayDeposit && !hasPaid;
+  const showPayStep = contacted && !hasPaid && !quoteBlocksPay;
+  const walletCanPay =
+    walletEnabled &&
+    walletBalanceCents != null &&
+    walletBalanceCents >= booking.commissionAmountCents;
+  const showWalletPay =
+    showPayStep && checkoutMode === "commission_only" && walletEnabled && !walletLoading;
 
-  // STEP 3: Contact revealed — buyer has paid
-  if (hasPaid && booking.revealedPhone) {
-    const digits = booking.revealedPhone.replace(/\D/g, "");
-    const displayPhone = booking.revealedPhone.replace(
-      /(\d{2})(\d{2,3})(\d{3})(\d{4})/,
-      "+$1 $2 $3 $4"
-    );
+  const liveHintEn =
+    liveAvailability?.syncEnabled && (liveAvailability.upcomingSlotCount ?? 0) > 0
+      ? " You can reference a time from the live openings above; the provider confirms in app messages."
+      : liveAvailability?.syncEnabled
+        ? " This provider syncs their office calendar here; new openings appear when their agenda updates."
+        : "";
+  const liveHintEs =
+    liveAvailability?.syncEnabled && (liveAvailability.upcomingSlotCount ?? 0) > 0
+      ? " Puedes citar un horario de los espacios en azul arriba; el proveedor confirma en los mensajes de la app."
+      : liveAvailability?.syncEnabled
+        ? " Este proveedor sincroniza su agenda en la app; los espacios se actualizan cuando cambia su calendario."
+        : "";
+
+  const noteCopy =
+    listingLang === "en"
+      ? {
+          label: "Message for the provider (optional)",
+          hint:
+            "Suggest times that work for you (e.g. weekday mornings, after 4pm). The exact time is confirmed in app messages — not by this note alone." +
+            liveHintEn,
+          ph: "Preferred windows: e.g. Tue/Thu afternoons, or Sat before 1pm…",
+        }
+      : {
+          label: "Mensaje para el proveedor (opcional)",
+          hint:
+            "Indica horarios o días que te funcionan (ej. mañanas, después de las 16 h). La hora exacta se confirma en los mensajes de la app — no solo con esta nota." +
+            liveHintEs,
+          ph: "Ventanas preferidas: ej. mar/jue por la tarde, o sábado antes de 13 h…",
+        };
+
+  // STEP 3: Paid — in-app messaging primary (no WhatsApp green bar for buyers)
+  if (hasPaid) {
+    const paidTitle =
+      listingLang === "en"
+        ? isService
+          ? "Service reserved"
+          : "Contact unlocked"
+        : isService
+          ? "Servicio reservado"
+          : "Contacto desbloqueado";
+
+    const paidLeadService =
+      listingLang === "en"
+        ? "Your deposit is confirmed. Continue in app messages below for scheduling and updates — we also send WhatsApp alerts with a link back here."
+        : "Tu depósito está confirmado. Sigue en los mensajes de la app abajo para agendar y recibir avisos — también enviamos alertas por WhatsApp con enlace de regreso.";
+
+    const paidLeadGoods =
+      listingLang === "en"
+        ? "Your connection fee is paid. Message the seller in the app below — WhatsApp alerts include a link back here."
+        : "Ya pagaste la tarifa de conexión. Escribe al vendedor en la app abajo — las alertas por WhatsApp incluyen enlace de regreso.";
+
+    const inAppCta =
+      listingLang === "en" ? "Open in-app messages" : "Abrir mensajes en la app";
 
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 overflow-hidden">
         <div className="px-4 py-3 border-b border-emerald-200 bg-emerald-100">
           <h3 className="text-sm font-bold text-emerald-900 flex items-center gap-2">
-            <span className="text-lg">✓</span> {isService ? "Servicio reservado" : "Contacto desbloqueado"}
+            <span className="text-lg">✓</span> {paidTitle}
           </h3>
         </div>
         <div className="px-4 py-4 space-y-3">
-          <p className="text-sm text-emerald-800">
-            {isService
-              ? "Ya pagaste la tarifa de servicio. Aquí está el contacto del proveedor:"
-              : "Ya pagaste la tarifa de conexión. Aquí está el contacto del vendedor:"}
-          </p>
-          <div className="bg-white rounded-xl p-3 border border-emerald-200">
-            <p className="text-xs text-[#6B7280] mb-1">Teléfono / WhatsApp</p>
-            <p className="text-lg font-bold text-[#1C1917] tracking-wide">{displayPhone}</p>
-          </div>
-          {booking.revealedWhatsappUrl && (
-            <a
-              href={booking.revealedWhatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
-              style={{ background: "#25D366", color: "white" }}
-            >
-              Contactar por WhatsApp
-            </a>
+          <p className="text-sm text-emerald-800">{isService ? paidLeadService : paidLeadGoods}</p>
+          {booking.hasPackage && booking.packageSessionCount != null && booking.packageSessionCount >= 2 && (
+            <p className="text-xs text-emerald-900 font-medium bg-white/60 rounded-lg px-2 py-1.5 border border-emerald-200/80">
+              {listingLang === "en"
+                ? `This payment covers your ${booking.packageSessionCount}-visit plan. Schedule each visit in app messages — your next rebook on Naranjogo can unlock loyalty discounts.`
+                : `Este pago cubre tu plan de ${booking.packageSessionCount} visitas. Agenda cada cita en los mensajes de la app; tu próxima reserva en Naranjogo puede sumar descuentos por lealtad.`}
+            </p>
           )}
-          <a
-            href={`tel:+${digits}`}
-            className="w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border border-[#1B4332] text-[#1B4332] hover:bg-[#ECFDF5]"
+          {(booking.paidBookingStatus || booking.ticketCode) && (
+            <div className="rounded-lg border border-emerald-200/90 bg-white/80 px-3 py-2 space-y-1">
+              {booking.paidBookingStatus ? (
+                <p className="text-[11px] font-semibold text-emerald-950 leading-snug">
+                  {paidBookingStatusCaption(booking.paidBookingStatus, listingLang)}
+                </p>
+              ) : null}
+              {booking.ticketCode ? (
+                <p className="text-[11px] text-emerald-900">
+                  <span className="text-emerald-800 font-semibold uppercase tracking-wide">
+                    {listingLang === "en" ? "Ticket" : "Ticket"}
+                  </span>{" "}
+                  <span className="font-mono font-bold">{booking.ticketCode}</span>
+                </p>
+              ) : (
+                <p className="text-[10px] text-amber-900/90 italic">
+                  {listingLang === "en"
+                    ? "Ticket code generating… this page refreshes automatically."
+                    : "Generando código de ticket… esta página se actualiza sola."}
+                </p>
+              )}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              document.getElementById("listing-inapp-chat")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            className="w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 bg-[#1B4332] text-white transition-colors hover:brightness-110"
           >
-            Llamar
-          </a>
+            {inAppCta}
+          </button>
         </div>
       </div>
     );
@@ -247,40 +561,62 @@ export default function ServiceBookingBlock({
   return (
     <div className="rounded-xl border border-[#E5E0D8] bg-white overflow-hidden">
       <div className="px-4 py-3 border-b border-[#E5E0D8] bg-[#F4F0EB]">
-        <h3 className="text-sm font-bold text-[#1C1917]">{isService ? "Reservar servicio" : "Comprar / contactar"}</h3>
+        <h3 className="text-sm font-bold text-[#1C1917]">{isService ? sb.bookService : sb.buyContact}</h3>
         {booking.hasPackage && booking.packageSessionCount && booking.packageTotalMxnCents != null && (
-          <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-950">
-            <strong>Plan aprobado (AISaravanna):</strong> {booking.packageSessionCount} sesiones por{" "}
-            <UsdCents cents={booking.packageTotalMxnCents!} lang={lang} /> en total. La tarifa de plataforma abajo se calcula sobre este
-            monto acordado con el proveedor.
+          <div className="mt-2 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50/90 border-2 border-amber-200 px-3 py-3 text-xs text-amber-950 space-y-2">
+            <p className="font-bold text-sm">
+              {listingLang === "en"
+                ? `Multi-visit plan: ${booking.packageSessionCount} sessions`
+                : `Plan de ${booking.packageSessionCount} visitas`}
+            </p>
+            <p>
+              <strong>{listingLang === "en" ? "Total for the plan:" : "Total del plan:"}</strong>{" "}
+              {formatMXN(booking.packageTotalMxnCents, listingLang)}{" "}
+              {listingLang === "en"
+                ? "— platform fee below is calculated on this agreed amount (one payment unlocks the whole plan)."
+                : "— la tarifa de plataforma abajo se calcula sobre este monto (un solo pago desbloquea todo el plan)."}
+            </p>
+            {booking.packageSavingsPctApprox != null && booking.packageSavingsPctApprox > 0 && (
+              <p className="text-emerald-800 font-semibold">
+                {listingLang === "en"
+                  ? `~${booking.packageSavingsPctApprox}% less than paying ${booking.packageSessionCount} visits at the list price.`
+                  : `~${booking.packageSavingsPctApprox}% menos que pagar ${booking.packageSessionCount} visitas al precio del anuncio.`}
+              </p>
+            )}
+            <p className="text-amber-900/95 text-[11px] leading-relaxed border-t border-amber-200/80 pt-2">
+              {sb.packageScheduleHint}
+            </p>
           </div>
         )}
         <p className="text-xs text-[#6B7280] mt-1">
           {booking.hasPackage ? (
-            <span>
-              El precio publicado en el anuncio es referencia. Pagas la{" "}
-              <strong>tarifa de plataforma</strong> (
-              {lang === "en" ? "commission, min. $10 USD" : "comisión, mín. $10 USD"})
-              {" "}calculada sobre el total del plan aprobado, para
-              desbloquear el WhatsApp del proveedor.
-            </span>
+            listingLang === "en" ? (
+              <>
+                One <strong>platform fee</strong> covers all <strong>{booking.packageSessionCount} visits</strong> in the
+                approved plan (commission on the plan total, min. $10 MXN). Stay on Naranjogo for loyalty, guarantee, and
+                follow-up bookings—like a multi-visit or monthly rhythm without paying list price each time.
+              </>
+            ) : (
+              <>
+                Una sola <strong>tarifa de plataforma</strong> cubre las{" "}
+                <strong>{booking.packageSessionCount} visitas</strong> del plan aprobado (comisión sobre el total del plan,
+                mín. $10 MXN). Sigue en Naranjogo: lealtad, garantía y re-reservas — ideal si vas varias veces al mes.
+              </>
+            )
+          ) : isService ? (
+            listingLang === "en" ? (
+              <>
+                The price is agreed directly with your provider. You only pay Naranjogo&apos;s{" "}
+                <strong>platform fee</strong> here (~commission; minimum $10 MXN via Stripe) to continue booking.
+              </>
+            ) : (
+              <>
+                El precio del anuncio lo acuerdas con el proveedor. Aquí solo pagas la{" "}
+                <strong>tarifa de la plataforma</strong> (~comisión; mín. $10 MXN por Stripe) para seguir con la reserva.
+              </>
+            )
           ) : (
-            <>
-              {isService ? (
-                <>
-                  El precio del anuncio lo acuerdas con el proveedor. Aquí solo pagas la{" "}
-                  <strong>tarifa de la plataforma</strong>{" "}
-                  ({lang === "en" ? "~commission; min. $10 USD via Stripe" : "~comisión; mín. $10 USD por Stripe"}) para
-                  desbloquear su WhatsApp.
-                </>
-              ) : (
-                <>
-                  El precio del artículo lo acuerdas con el vendedor (o pagas fuera de la app). Aquí solo pagas la{" "}
-                  <strong>tarifa de conexión</strong> de AISaravanna (
-                  {lang === "en" ? "commission; min. $10 USD" : "comisión; mín. $10 USD"}) para desbloquear su WhatsApp.
-                </>
-              )}
-            </>
+            sb.goodsFeeBlurb
           )}
         </p>
       </div>
@@ -292,7 +628,11 @@ export default function ServiceBookingBlock({
             {contacted ? "✓" : "1"}
           </span>
           <span className={contacted ? "text-emerald-700 font-medium" : ""}>
-            Envía un mensaje al {partyLabel} en la app
+            {listingLang === "en"
+              ? isService
+                ? "Send your provider an in-app message"
+                : "Send the seller an in-app message"
+              : `Envía un mensaje al ${partyLabel} en la app`}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -300,15 +640,34 @@ export default function ServiceBookingBlock({
             {hasPaid ? "✓" : "2"}
           </span>
           <span>
-            Paga la tarifa {isService ? "de servicio" : "de conexión"} (
-            <UsdCents cents={booking.commissionAmountCents} lang={lang} />)
+            {booking.hasPackage
+              ? listingLang === "en"
+                ? `Pay one platform fee for the full plan (${formatMXN(booking.commissionAmountCents, listingLang)})`
+                : `Paga una tarifa para todo el plan (${formatMXN(booking.commissionAmountCents, listingLang)})`
+              : listingLang === "en"
+                ? isService
+                  ? `Pay the service fee (${formatMXN(booking.commissionAmountCents, listingLang)})`
+                  : `Pay the connection fee (${formatMXN(booking.commissionAmountCents, listingLang)})`
+                : `Paga la tarifa ${isService ? "de servicio" : "de conexión"} (${formatMXN(booking.commissionAmountCents, listingLang)})`}
           </span>
         </div>
         <div className="flex items-center gap-2">
           <span className={hasPaid ? "text-emerald-600 font-bold" : "text-[#9CA3AF]"}>
             {hasPaid ? "✓" : "3"}
           </span>
-          <span>Recibe el contacto directo (WhatsApp / teléfono)</span>
+          <span>
+            {isService
+              ? booking.hasPackage && booking.packageSessionCount
+                ? sb.step3InAppPackage(booking.packageSessionCount)
+                : sb.step3InApp
+              : booking.hasPackage && booking.packageSessionCount
+                ? listingLang === "en"
+                  ? `Continue in app messages (${booking.packageSessionCount}-visit plan)`
+                  : `Continúa en mensajes de la app (plan de ${booking.packageSessionCount} visitas)`
+                : listingLang === "en"
+                  ? "Continue in app messages"
+                  : "Continúa en mensajes de la app"}
+          </span>
         </div>
       </div>
 
@@ -317,12 +676,35 @@ export default function ServiceBookingBlock({
         <div className="px-4 pb-4 space-y-3">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
             <p className="text-xs text-blue-800 leading-relaxed">
-              <strong>Paso 1:</strong> En <strong>Mensajes en la app</strong> (recuadro de arriba), escribe al{" "}
-              {partyLabel} y envía el mensaje. <strong>Después de enviarlo</strong>, aparece el botón{" "}
-              <strong>Pagar … y obtener contacto</strong>
-              {isService
-                ? " (no pagas el precio del anuncio en Stripe — solo la tarifa del paso 2)."
-                : " (el pago en Stripe es solo la tarifa de conexión, no el precio del artículo)."}
+              {listingLang === "en" ? (
+                isService ? (
+                  <>
+                    <strong>Step 1:</strong> In <strong>Messages</strong> (above), message your provider and send it.{" "}
+                    <strong>After that</strong>, the <strong>step 2 pay button</strong> appears
+                    {" "}(Stripe only collects the platform fee — not the service price.)
+                  </>
+                ) : (
+                  <>
+                    <strong>Step 1:</strong> Use <strong>Messages</strong> above and contact the seller.{" "}
+                    <strong>After sending,</strong> you&apos;ll see <strong>Pay … and unlock WhatsApp</strong>
+                    {" "}(Stripe is only Naranjogo&apos;s connection fee, not the item price.)
+                  </>
+                )
+              ) : isService ? (
+                <>
+                  <strong>Paso 1:</strong> En <strong>Mensajes en la app</strong> (recuadro de arriba), escribe al{" "}
+                  {partyLabel} y envía el mensaje. <strong>Después de enviarlo</strong>, aparece el botón{" "}
+                  <strong>para pagar la tarifa del paso 2</strong>
+                  {" "} (solo la tarifa de plataforma en Stripe — no el precio del anuncio).
+                </>
+              ) : (
+                <>
+                  <strong>Paso 1:</strong> En <strong>Mensajes en la app</strong> (recuadro de arriba), escribe al{" "}
+                  {partyLabel} y envía el mensaje. <strong>Después de enviarlo</strong>, aparece el botón{" "}
+                  <strong>Pagar … y desbloquear WhatsApp</strong>
+                  {" "}(el pago en Stripe es solo la tarifa de conexión, no el precio del artículo).
+                </>
+              )}
             </p>
           </div>
           <button
@@ -331,71 +713,455 @@ export default function ServiceBookingBlock({
             disabled={refreshing || loading}
             className="w-full py-2.5 rounded-xl border border-[#1B4332] text-[#1B4332] text-xs font-semibold hover:bg-[#ECFDF5] disabled:opacity-50"
           >
-            {refreshing ? "Actualizando…" : "Ya envié mi mensaje — actualizar"}
+            {refreshing ? sb.refreshBusy : sb.refreshBtn}
           </button>
         </div>
       )}
 
-      {/* STEP 2: Contacted, ready to pay */}
-      {contacted && !hasPaid && (
+      {/* STEP 2: Quote pending (housekeeping) */}
+      {contacted && quoteBlocksPay && (
+        <div className="px-4 pb-4 space-y-3">
+          {quoteStatus === "pending" ? (
+            <ServiceQuoteBuyerPanel
+              listingId={listingId}
+              quoteStatus="pending"
+              agreedSubtotalMxnCents={
+                booking.agreedSubtotalMxnCents ?? booking.pricingBaseMxnCents ?? null
+              }
+              quoteSentAt={booking.quoteSentAt ?? null}
+              lang={listingLang === "en" ? "en" : "es"}
+              onResponded={() => void load()}
+            />
+          ) : null}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+            <p className="text-xs text-blue-900 leading-relaxed">
+              {quoteStatus === "pending" ? (
+                listingLang === "en" ? (
+                  <>
+                    <strong>Step 2:</strong> Your provider sent a quote — open <strong>Messages</strong> above to{" "}
+                    <strong>Accept</strong> or <strong>Decline</strong>. After accepting, pay the deposit here.
+                  </>
+                ) : (
+                  <>
+                    <strong>Paso 2:</strong> Tu proveedor envió una cotización — en <strong>Mensajes</strong> arriba{" "}
+                    <strong>Acepta</strong> o <strong>Rechaza</strong>. Después paga el depósito aquí.
+                  </>
+                )
+              ) : quoteStatus === "declined" ? (
+                listingLang === "en"
+                  ? "You declined the quote. Wait for a revised quote from your provider, or send a new request in chat."
+                  : "Rechazaste la cotización. Espera una cotización revisada o envía una nueva solicitud en el chat."
+              ) : booking.quoteAwaitingProvider ? (
+                listingLang === "en" ? (
+                  <>
+                    <strong>Step 2 — waiting:</strong> {quoteAwaitingProviderLine(providerSlug, "en")}
+                  </>
+                ) : (
+                  <>
+                    <strong>Paso 2 — en espera:</strong> {quoteAwaitingProviderLine(providerSlug, "es")}
+                  </>
+                )
+              ) : listingLang === "en" ? (
+                <>
+                  <strong>Step 2:</strong> {quoteSendRequestLine(providerSlug, "en")}
+                </>
+              ) : (
+                <>
+                  <strong>Paso 2:</strong> {quoteSendRequestLine(providerSlug, "es")}
+                </>
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              document.getElementById("listing-inapp-chat")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+            className="w-full py-2.5 rounded-xl border border-[#1B4332] text-[#1B4332] text-xs font-semibold hover:bg-[#ECFDF5]"
+          >
+            {listingLang === "en" ? "Go to messages & quote" : "Ir a mensajes y cotización"}
+          </button>
+        </div>
+      )}
+
+      {/* STEP 2: Contacted, ready to pay deposit */}
+      {showPayStep && (
         <div className="px-4 pb-4 space-y-3">
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
             <p className="text-xs text-amber-800">
-              <strong>Paso 2:</strong>{" "}
-              {isService
-                ? "Paga la tarifa de servicio para recibir el número de contacto del proveedor."
-                : "Paga la tarifa de conexión para recibir el WhatsApp del vendedor."}
+              <strong>{listingLang === "en" ? "Step 2:" : "Paso 2:"}</strong>{" "}
+              {requiresQuote
+                ? serviceDepositConfirmLine(providerSlug, listingLang)
+                : isService
+                  ? listingLang === "en"
+                    ? "Pay the service fee below to continue."
+                    : "Paga la tarifa de servicio abajo para continuar."
+                  : listingLang === "en"
+                    ? "Pay the connection fee to continue in the app."
+                    : "Paga la tarifa de conexión para continuar en la app."}
             </p>
           </div>
 
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            rows={2}
-            placeholder="Nota para tu reserva (opcional): fecha, hora, detalles…"
-            className="w-full rounded-xl border border-[#E5E0D8] px-3 py-2 text-sm outline-none focus:border-[#1B4332]"
-          />
+          {requiresQuote &&
+            booking.agreedSubtotalMxnCents != null &&
+            booking.agreedSubtotalMxnCents > 0 && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 leading-relaxed">
+                {listingLang === "en" ? (
+                  <>
+                    <strong>Official quote total:</strong> {formatMXN(booking.agreedSubtotalMxnCents, listingLang)} — platform
+                    fee below is calculated on this amount.
+                  </>
+                ) : (
+                  <>
+                    <strong>Total de cotización oficial:</strong> {formatMXN(booking.agreedSubtotalMxnCents, listingLang)} — la
+                    tarifa de plataforma abajo se calcula sobre este monto.
+                  </>
+                )}
+              </div>
+            )}
 
-          <div className="bg-[#F4F0EB] rounded-xl p-3 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-[#6B7280]">
-                Tarifa {isService ? "de servicio" : "de conexión"} ({booking.commissionPct}%)
+          {booking.usingAgreedPrice &&
+            booking.agreedSubtotalMxnCents != null &&
+            booking.agreedSubtotalMxnCents > 0 &&
+            !requiresQuote && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 leading-relaxed">
+                {listingLang === "en" ? (
+                  <>
+                    <strong>Agreed job total:</strong> {formatMXN(booking.agreedSubtotalMxnCents, listingLang)} (set by your provider).
+                    Platform fee is calculated on this amount.
+                  </>
+                ) : (
+                  <>
+                    <strong>Precio acordado del trabajo:</strong> {formatMXN(booking.agreedSubtotalMxnCents, listingLang)} (fijado por tu
+                    proveedor). La tarifa de Naranjogo se calcula sobre este monto.
+                  </>
+                )}
+              </div>
+            )}
+
+          {booking.sellerConnectReady && booking.fullConnectPreview && !requiresQuote && (
+            <div className="rounded-xl border border-[#E5E0D8] bg-white p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-[#374151]">
+                {listingLang === "en" ? "How do you want to pay?" : "¿Cómo quieres pagar?"}
               </p>
-              <p className="text-lg font-bold text-[#1C1917]">
-                <UsdCents cents={booking.commissionAmountCents} lang={lang} />
-              </p>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="checkout-mode"
+                  className="mt-1"
+                  checked={checkoutMode === "commission_only"}
+                  onChange={() => setCheckoutMode("commission_only")}
+                />
+                <span className="text-xs text-[#374151] leading-snug">
+                  {listingLang === "en" ? (
+                    <>
+                      <strong>Platform fee only</strong> — same as before. You coordinate the service price directly with
+                      the provider (cash, transfer, etc.).
+                    </>
+                  ) : (
+                    <>
+                      <strong>Solo tarifa de plataforma</strong> — como antes. El precio del servicio lo liquidas directo
+                      con el proveedor (efectivo, transferencia, etc.).
+                    </>
+                  )}
+                </span>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="checkout-mode"
+                  className="mt-1"
+                  checked={checkoutMode === "full_connect"}
+                  onChange={() => setCheckoutMode("full_connect")}
+                />
+                <span className="text-xs text-[#374151] leading-snug">
+                  {listingLang === "en" ? (
+                    <>
+                      <strong>Pay the full service in the app</strong> — service subtotal + platform fee + VAT (IVA), via
+                      Stripe Connect to your provider when they have payouts enabled.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Pagar el servicio completo en la app</strong> — subtotal del servicio + comisión + IVA, vía
+                      Stripe Connect al proveedor cuando tiene cobros activos.
+                    </>
+                  )}
+                </span>
+              </label>
             </div>
+          )}
+
+          <div>
+            <label className="block text-[11px] font-medium text-[#374151] mb-1">{noteCopy.label}</label>
+            <p className="text-[10px] text-[#6B7280] mb-2 leading-snug">{noteCopy.hint}</p>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder={noteCopy.ph}
+              className="w-full rounded-xl border border-[#E5E0D8] px-3 py-2 text-sm outline-none focus:border-[#1B4332]"
+            />
           </div>
+
+          {booking.loyaltyDiscountPctApplied != null &&
+            booking.loyaltyDiscountPctApplied > 0 &&
+            booking.commissionBeforeLoyaltyCents != null &&
+            booking.commissionBeforeLoyaltyCents > booking.commissionAmountCents && (
+              <div className="space-y-2">
+                <div className="bg-gradient-to-r from-emerald-700 to-[#065F46] rounded-xl p-3 text-center">
+                  <p className="text-xs font-semibold text-white leading-snug">
+                    {listingLang === "en"
+                      ? `⭐ ${booking.loyaltyDiscountPctApplied}% loyalty discount applied — the amount below matches what you pay in Stripe.`
+                      : `⭐ ${booking.loyaltyDiscountPctApplied}% de descuento por lealtad aplicado — el monto de abajo es el que pagarás en Stripe.`}
+                  </p>
+                </div>
+                {loyaltyHint && !loyaltyHint.milestoneDiscount && loyaltyHint.bookingsUntil > 0 && (
+                  <p className="text-[11px] text-center text-emerald-800 font-medium leading-snug px-1">
+                    {listingLang === "en" ? (
+                      <>
+                        {loyaltyHint.bookingsUntil} more paid booking{loyaltyHint.bookingsUntil !== 1 ? "s" : ""} until{" "}
+                        {loyaltyHint.milestoneDiscountPct ?? 15}% off (every {loyaltyHint.everyN ?? 5}).
+                      </>
+                    ) : (
+                      <>
+                        Te faltan {loyaltyHint.bookingsUntil} reserva{loyaltyHint.bookingsUntil !== 1 ? "s" : ""} pagada
+                        {loyaltyHint.bookingsUntil !== 1 ? "s" : ""} para el {loyaltyHint.milestoneDiscountPct ?? 15}% (cada{" "}
+                        {loyaltyHint.everyN ?? 5}).
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
+
+          {checkoutMode === "full_connect" && booking.fullConnectPreview ? (
+            <div className="bg-[#F4F0EB] rounded-xl p-3 space-y-2">
+              <p className="text-xs font-semibold text-[#1C1917]">
+                {listingLang === "en" ? "Checkout total (Stripe)" : "Total en Stripe"}
+              </p>
+              <div className="text-xs text-[#374151] space-y-1">
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#6B7280]">{listingLang === "en" ? "Service" : "Servicio"}</span>
+                  <span className="font-tabular-nums">{formatMXN(booking.fullConnectPreview.subtotalCents, listingLang)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#6B7280]">
+                    {listingLang === "en" ? "Platform fee" : "Tarifa plataforma"} ({booking.commissionPct}%)
+                  </span>
+                  <span className="font-tabular-nums">{formatMXN(booking.fullConnectPreview.commissionCents, listingLang)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#6B7280]">
+                    IVA ({booking.fullConnectPreview.vatPercent}%)
+                  </span>
+                  <span className="font-tabular-nums">{formatMXN(booking.fullConnectPreview.vatCents, listingLang)}</span>
+                </div>
+                <div className="flex justify-between gap-2 pt-1 border-t border-[#E5E0D8] font-bold text-[#1C1917]">
+                  <span>{listingLang === "en" ? "You pay" : "Pagas"}</span>
+                  <span className="font-tabular-nums text-base">{formatMXN(booking.fullConnectPreview.totalCents, listingLang)}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-[#F4F0EB] rounded-xl p-3 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs text-[#6B7280]">
+                  {listingLang === "en" ? "Platform fee" : "Tarifa"}{" "}
+                  {isService ? (listingLang === "en" ? "(service)" : "de servicio") : listingLang === "en" ? "(connection)" : "de conexión"}{" "}
+                  ({booking.commissionPct}%)
+                </p>
+                <div className="flex flex-wrap items-baseline gap-2 mt-0.5">
+                  {booking.commissionBeforeLoyaltyCents != null &&
+                    booking.commissionBeforeLoyaltyCents > booking.commissionAmountCents && (
+                      <p className="text-sm text-[#9CA3AF] line-through decoration-[#9CA3AF]">
+                        {formatMXN(booking.commissionBeforeLoyaltyCents, listingLang)}
+                      </p>
+                    )}
+                  <p className="text-lg font-bold text-[#1C1917]">{formatMXN(booking.commissionAmountCents, listingLang)}</p>
+                </div>
+                {booking.loyaltyDiscountCents != null && booking.loyaltyDiscountCents > 0 && (
+                  <p className="text-[11px] text-emerald-700 font-semibold mt-1">
+                    {listingLang === "en"
+                      ? `You save ${formatMXN(booking.loyaltyDiscountCents, listingLang)} on the fee.`
+                      : `Ahorras ${formatMXN(booking.loyaltyDiscountCents, listingLang)} en la tarifa.`}
+                  </p>
+                )}
+              </div>
+              <span className="text-xs text-[#6B7280] shrink-0">MXN</span>
+            </div>
+          )}
+
+          {showWalletPay && (
+            <div className="rounded-xl border border-[#E5E0D8] bg-white p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-[#374151]">
+                {listingLang === "en" ? "Pay with" : "Pagar con"}
+              </p>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="payment-method"
+                  className="mt-1"
+                  checked={paymentMethod === "stripe"}
+                  onChange={() => setPaymentMethod("stripe")}
+                />
+                <span className="text-xs text-[#374151] leading-snug">
+                  {listingLang === "en" ? "Card (Stripe Checkout)" : "Tarjeta (Stripe Checkout)"}
+                </span>
+              </label>
+              <label className={`flex items-start gap-2 ${walletCanPay ? "cursor-pointer" : "opacity-60"}`}>
+                <input
+                  type="radio"
+                  name="payment-method"
+                  className="mt-1"
+                  checked={paymentMethod === "wallet"}
+                  disabled={!walletCanPay}
+                  onChange={() => setPaymentMethod("wallet")}
+                />
+                <span className="text-xs text-[#374151] leading-snug">
+                  {listingLang === "en" ? (
+                    <>
+                      <strong>Saldo Naranjo</strong> — available{" "}
+                      {formatMXN(walletBalanceCents ?? 0, listingLang)}
+                      {!walletCanPay && (
+                        <>
+                          {" "}
+                          (need {formatMXN(booking.commissionAmountCents, listingLang)} —{" "}
+                          <Link href="/saldo" className="underline font-medium">
+                            top up
+                          </Link>
+                          )
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <strong>Saldo Naranjo</strong> — disponible{" "}
+                      {formatMXN(walletBalanceCents ?? 0, listingLang)}
+                      {!walletCanPay && (
+                        <>
+                          {" "}
+                          (faltan {formatMXN(booking.commissionAmountCents, listingLang)} —{" "}
+                          <Link href="/saldo" className="underline font-medium">
+                            cargar saldo
+                          </Link>
+                          )
+                        </>
+                      )}
+                    </>
+                  )}
+                </span>
+              </label>
+            </div>
+          )}
 
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || (paymentMethod === "wallet" && !walletCanPay)}
             onClick={() => void startCheckout()}
             className="w-full py-3 rounded-xl bg-[#1B4332] text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
           >
-            {busy ? "Procesando…" : (
-              <>
-                Pagar <UsdCents cents={booking.commissionAmountCents} lang={lang} /> y obtener contacto
-              </>
-            )}
+            {busy
+              ? listingLang === "en"
+                ? "Processing…"
+                : "Procesando…"
+              : paymentMethod === "wallet" && checkoutMode === "commission_only"
+                ? listingLang === "en"
+                  ? requiresQuote
+                    ? `Pay deposit ${formatMXN(booking.commissionAmountCents, listingLang)} with Saldo`
+                    : `Pay ${formatMXN(booking.commissionAmountCents, listingLang)} with Saldo`
+                  : requiresQuote
+                    ? `Pagar depósito ${formatMXN(booking.commissionAmountCents, listingLang)} con Saldo`
+                    : `Pagar ${formatMXN(booking.commissionAmountCents, listingLang)} con Saldo`
+                : checkoutMode === "full_connect" && booking.fullConnectPreview
+                ? listingLang === "en"
+                  ? `Pay ${formatMXN(booking.fullConnectPreview.totalCents, listingLang)} (full checkout)`
+                  : `Pagar ${formatMXN(booking.fullConnectPreview.totalCents, listingLang)} (total)`
+                : isService
+                  ? listingLang === "en"
+                    ? requiresQuote
+                      ? `Pay deposit ${formatMXN(booking.commissionAmountCents, listingLang)}`
+                      : `Pay ${formatMXN(booking.commissionAmountCents, listingLang)}`
+                    : requiresQuote
+                      ? `Pagar depósito ${formatMXN(booking.commissionAmountCents, listingLang)}`
+                      : `Pagar ${formatMXN(booking.commissionAmountCents, listingLang)}`
+                  : listingLang === "en"
+                    ? `Pay ${formatMXN(booking.commissionAmountCents, listingLang)}`
+                    : `Pagar ${formatMXN(booking.commissionAmountCents, listingLang)}`}
           </button>
 
           <p className="text-center text-xs text-[#6B7280]">
-            Pago seguro con Stripe. Al pagar recibirás el WhatsApp/teléfono del {partyLabel}.
+            {paymentMethod === "wallet" && checkoutMode === "commission_only"
+              ? listingLang === "en"
+                ? "Paid instantly from your Naranjo balance."
+                : "Se cobra al instante de tu saldo Naranjo."
+              : isService
+                ? listingLang === "en"
+                  ? "Secure checkout with Stripe."
+                  : "Pago seguro con Stripe."
+                : listingLang === "en"
+                  ? "Secure payment with Stripe. After paying, continue coordinating in app messages."
+                  : "Pago seguro con Stripe. Al pagar, sigue coordinando en los mensajes de la app."}
           </p>
 
-          {loyaltyHint && (
-            <div className="bg-gradient-to-r from-[#1B4332] to-[#2D6A4F] rounded-xl p-3 text-center">
-              {loyaltyHint.bookingsUntil === 0 ? (
+          {loyaltyHint && loyaltyHint.discountPct > 0 && booking.commissionBeforeLoyaltyCents == null && (
+            <div className="bg-gradient-to-r from-[#1B4332] to-[#2D6A4F] rounded-xl p-3 text-center space-y-1">
+              {loyaltyHint.milestoneDiscount && loyaltyHint.bookingsUntil === 0 ? (
                 <p className="text-xs font-semibold text-white">
-                  🎉 ¡Esta reserva tiene {loyaltyHint.discountPct}% de descuento por tu lealtad!
+                  🎉{" "}
+                  {listingLang === "en"
+                    ? `This booking includes ${loyaltyHint.discountPct}% off the fee (loyalty milestone).`
+                    : `¡Esta reserva incluye ${loyaltyHint.discountPct}% de descuento en la tarifa (lealtad)!`}
+                </p>
+              ) : loyaltyHint.rebookDiscount ? (
+                <p className="text-xs font-semibold text-white">
+                  ⭐{" "}
+                  {listingLang === "en"
+                    ? `${loyaltyHint.discountPct}% off for booking again on Naranjogo (app only). Final amount is confirmed at checkout.`
+                    : `${loyaltyHint.discountPct}% de descuento por volver a reservar en Naranjogo (solo en la app). El monto final se confirma al pagar.`}
                 </p>
               ) : (
-                <p className="text-xs text-white/90">
-                  ⭐ {loyaltyHint.bookingsUntil} reserva{loyaltyHint.bookingsUntil !== 1 ? "s" : ""} más
-                  para obtener {loyaltyHint.discountPct}% de descuento
+                <p className="text-xs font-semibold text-white">
+                  🎉{" "}
+                  {listingLang === "en"
+                    ? `This booking has ${loyaltyHint.discountPct}% off the fee.`
+                    : `¡Esta reserva tiene ${loyaltyHint.discountPct}% de descuento!`}
                 </p>
               )}
+              {!loyaltyHint.milestoneDiscount && (
+                <p className="text-[10px] text-white/85 leading-snug">
+                  {listingLang === "en" ? (
+                    <>
+                      {loyaltyHint.bookingsUntil} more paid booking
+                      {loyaltyHint.bookingsUntil !== 1 ? "s" : ""} until {loyaltyHint.milestoneDiscountPct ?? 15}% (every{" "}
+                      {loyaltyHint.everyN ?? 5}).
+                    </>
+                  ) : (
+                    <>
+                      A {loyaltyHint.bookingsUntil} reserva{loyaltyHint.bookingsUntil !== 1 ? "s" : ""} del bonus{" "}
+                      {loyaltyHint.milestoneDiscountPct ?? 15}% (cada {loyaltyHint.everyN ?? 5} reservas pagadas).
+                    </>
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+          {loyaltyHint && loyaltyHint.discountPct === 0 && loyaltyHint.bookingsUntil > 0 && (
+            <div className="bg-gradient-to-r from-[#1B4332]/90 to-[#2D6A4F]/90 rounded-xl p-3 text-center">
+              <p className="text-xs text-white/90">
+                ⭐{" "}
+                {listingLang === "en" ? (
+                  <>
+                    {loyaltyHint.bookingsUntil} more paid booking{loyaltyHint.bookingsUntil !== 1 ? "s" : ""} until{" "}
+                    {loyaltyHint.milestoneDiscountPct ?? 15}% off the fee.
+                  </>
+                ) : (
+                  <>
+                    {loyaltyHint.bookingsUntil} reserva{loyaltyHint.bookingsUntil !== 1 ? "s" : ""} más para{" "}
+                    {loyaltyHint.milestoneDiscountPct ?? 15}% en la tarifa (lealtad).
+                  </>
+                )}
+              </p>
             </div>
           )}
         </div>

@@ -1,10 +1,42 @@
 export type Lang = "en" | "es" | "hi" | "gu";
 
+/** Bilingual UI copy (ported NaranjoGo flows use en/es only). */
+export type UiLang = "en" | "es";
+
 /** US-first: English default; ES in UI; HI/GU for listing copy + category labels when provided. */
 export const DEFAULT_LANG: Lang = "en";
 
 /** Browser persistence for language preference (profile, bookings, etc.). */
 export const LANG_STORAGE_KEY = "aisaravanna_lang";
+
+/** Map full Lang to en/es for ported service-flow UI copy. */
+export function langForUiCopy(lang: Lang): UiLang {
+  return lang === "es" ? "es" : "en";
+}
+
+/** Intl locale for date/number formatting in ported service flows. */
+export function intlLocale(lang: Lang): string {
+  return langForUiCopy(lang) === "en" ? "en-US" : "es-US";
+}
+
+/** @deprecated legacy key — use LANG_STORAGE_KEY */
+export const NARANJO_LANG_COOKIE = LANG_STORAGE_KEY;
+
+/** Persist language in localStorage (client-only). */
+export function persistAppLangClient(lang: Lang): void {
+  writeStoredLang(lang);
+}
+
+/** Append or update `?lang=` on a path (preserves hash and other query keys). */
+export function withLang(path: string, lang: Lang): string {
+  const hashIdx = path.indexOf("#");
+  const base = hashIdx >= 0 ? path.slice(0, hashIdx) : path;
+  const hash = hashIdx >= 0 ? path.slice(hashIdx) : "";
+  const qIdx = base.indexOf("?");
+  const pathname = qIdx >= 0 ? base.slice(0, qIdx) : base;
+  const params = qIdx >= 0 ? new URLSearchParams(base.slice(qIdx + 1)) : new URLSearchParams();
+  return hrefWithLang(pathname, lang, params) + hash;
+}
 
 /** Older keys — checked in order when reading preference */
 /** Prior spellings / keys users may still have in localStorage */
