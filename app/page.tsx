@@ -9,7 +9,7 @@ import {
   CountyServiceCatalogSection,
   type CountyServiceCatalogRow,
 } from "@/components/home/CountyServiceCatalogSection";
-import { ConciergeSearchHint } from "@/components/home/ConciergeSearchHint";
+import { ConciergeSearchHint, type TopListingQuote } from "@/components/home/ConciergeSearchHint";
 import type { ConciergeRequest } from "@/lib/concierge-intent";
 import { COLONIAS, COLONIA_RADIUS_KM, nearestColonia } from "@/lib/colonias";
 import { getServerFetchOrigin } from "@/lib/app-url";
@@ -27,6 +27,7 @@ import { postgrestActiveListingVerificationFragment } from "@/lib/browse-listing
 import { langFromParam } from "@/lib/i18n-lang";
 import { listingTitle } from "@/lib/listing-language";
 import { formatUsdCents } from "@/lib/money";
+import { inferProviderSlugFromListingTitle } from "@/lib/infer-listing-provider-slug";
 
 import { censusCountySlugAtLngLat } from "@/lib/census-county-at-point";
 
@@ -133,6 +134,7 @@ export default async function HomePage({ searchParams }: Props) {
   let countyCatalog: CountyServiceCatalogRow[] = [];
   let searchConcierge: ConciergeRequest | null = null;
   let searchCategoryHint: string | null = null;
+  let topListingQuote: TopListingQuote | null = null;
 
   try {
     const supaHeaders = getServiceRoleRestHeaders();
@@ -161,6 +163,7 @@ export default async function HomePage({ searchParams }: Props) {
           (typeof data.searchCategoryHint === "string" ? data.searchCategoryHint : null) ??
           data.debug?.parse?.searchCategoryHint ??
           null;
+        topListingQuote = (data.topListingQuote as TopListingQuote | null) ?? null;
         const detectedColonia = data.colonia ?? null;
         cards = (data.results ?? []).map((row: any) => {
           const rLat = row.location_lat ?? NJ_LAT;
@@ -197,6 +200,9 @@ export default async function HomePage({ searchParams }: Props) {
             _dist_km: row._dist_km ?? null,
             dist_km: row._dist_km ?? null,
             _mode: row._mode,
+            provider_slug: inferProviderSlugFromListingTitle(
+              String(row.title_en ?? row.title_es ?? ""),
+            ),
           };
         });
         const effSlug =
@@ -335,6 +341,9 @@ export default async function HomePage({ searchParams }: Props) {
               query={query}
               concierge={searchConcierge}
               searchCategoryHint={searchCategoryHint}
+              topListing={topListingQuote}
+              shopperLat={searchParams?.lat ?? null}
+              shopperLng={searchParams?.lng ?? null}
             />
           )}
         </Suspense>
@@ -367,6 +376,7 @@ export default async function HomePage({ searchParams }: Props) {
             mapCenterLng={refLng}
             isDev={process.env.NODE_ENV === "development"}
             devPendingServicesEnabled={devPendingServices}
+            searchQuery={query.trim() || undefined}
           />
         </Suspense>
         </div>

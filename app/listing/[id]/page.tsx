@@ -7,6 +7,8 @@ import ServiceMenuPublic from "@/components/ServiceMenuPublic";
 import type { ServiceMenu } from "@/lib/listing-service-menu";
 import { effectiveServiceMenuForListing } from "@/lib/listing-service-menu";
 import { inferProviderSlugFromListingTitle } from "@/lib/infer-listing-provider-slug";
+import { providerServiceRequiresQuoteAccept } from "@/lib/provider-services";
+import { withLang } from "@/lib/i18n-lang";
 import WhatsAppCTA from "@/components/WhatsAppCTA";
 import SellerReviews, { RatingSummary } from "@/components/SellerReviews";
 import ReportButton from "@/components/ReportButton";
@@ -55,7 +57,17 @@ export default async function ListingPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams?: { chat?: string; lang?: string; lat?: string; lng?: string };
+  searchParams?: {
+    chat?: string;
+    lang?: string;
+    lat?: string;
+    lng?: string;
+    quote?: string;
+    from_search?: string;
+    from_q?: string;
+    request?: string;
+    rebook?: string;
+  };
 }) {
   const supaUrl = getSupabaseUrl();
   const h = { ...getServiceRoleRestHeaders(), "Content-Type": "application/json" };
@@ -101,14 +113,36 @@ export default async function ListingPage({
   const sellerTrust = verificationPropsFromSellerRow(
     listing.users as Parameters<typeof verificationPropsFromSellerRow>[0]
   );
-  const providerSlug = isServiceListing ? inferProviderSlugFromListingTitle(String(listing.title_es ?? "")) : null;
+  const providerSlug = isServiceListing ? inferProviderSlugFromListingTitle(String(listing.title_es ?? listing.title_en ?? "")) : null;
+  const requiresQuoteAccept = providerServiceRequiresQuoteAccept(providerSlug);
+  const quoteLayout = providerSlug === "limpieza" ? "housekeeping" : "default";
+  const highlightQuote = searchParams?.quote === "1";
+  const highlightFromSearch =
+    searchParams?.from_search === "1" || Boolean(searchParams?.from_q?.trim());
+  const highlightRequest = searchParams?.request === "1";
+  const highlightRebook = searchParams?.rebook === "1";
+
+  const loginQs = new URLSearchParams();
+  if (searchParams?.lang) loginQs.set("lang", searchParams.lang);
+  if (searchParams?.chat) loginQs.set("chat", searchParams.chat);
+  if (searchParams?.quote === "1") loginQs.set("quote", "1");
+  if (searchParams?.from_search === "1") loginQs.set("from_search", "1");
+  if (searchParams?.from_q?.trim()) loginQs.set("from_q", searchParams.from_q.trim().slice(0, 120));
+  if (searchParams?.lat) loginQs.set("lat", searchParams.lat);
+  if (searchParams?.lng) loginQs.set("lng", searchParams.lng);
+  const loginReturnTo = `/listing/${params.id}${loginQs.toString() ? `?${loginQs.toString()}` : ""}#listing-inapp-chat`;
+  const fullListingHref = withLang(`/listing/${params.id}`, listingLang);
   const serviceMenu: ServiceMenu | null = isServiceListing
     ? effectiveServiceMenuForListing(
         (listing as { service_menu?: ServiceMenu | null }).service_menu ?? null,
         providerSlug,
       )
     : null;
-  const loginReturnTo = `/listing/${params.id}${searchParams?.lang ? `?lang=${searchParams.lang}` : ""}${searchParams?.chat ? `${searchParams.lang ? "&" : "?"}chat=${searchParams.chat}` : ""}`;
+
+  const searchContextNote =
+    highlightFromSearch && searchParams?.from_q?.trim()
+      ? searchParams.from_q.trim()
+      : null;
 
   const shopperLat = parseFloat(searchParams?.lat ?? "");
   const shopperLng = parseFloat(searchParams?.lng ?? "");
@@ -251,7 +285,37 @@ export default async function ListingPage({
           </Link>
         )}
         <div className="flex flex-col gap-3">
-          <ListingChat listingId={params.id} initialConversationId={searchParams?.chat} />
+          {searchContextNote && isServiceListing && (
+            <div className="rounded-xl border border-[#2D6A4F]/30 bg-[#1B4332]/5 px-4 py-3 text-sm text-[#1B4332]">
+              {listingLang === "es" ? (
+                <>
+                  Buscaste: <span className="font-semibold">&ldquo;{searchContextNote}&rdquo;</span> — envía
+                  un mensaje o solicita cotización abajo.
+                </>
+              ) : (
+                <>
+                  You searched: <span className="font-semibold">&ldquo;{searchContextNote}&rdquo;</span> — message
+                  the provider or request a quote below.
+                </>
+              )}
+            </div>
+          )}
+          <div id="listing-inapp-chat">
+            <ListingChat
+              listingId={params.id}
+              initialConversationId={searchParams?.chat}
+              loginReturnTo={loginReturnTo}
+              fullListingHref={fullListingHref}
+              lang={listingLang}
+              serviceMenu={serviceMenu}
+              quoteLayout={quoteLayout}
+              providerSlug={providerSlug}
+              requiresQuoteAccept={requiresQuoteAccept}
+              highlightQuote={highlightQuote || highlightFromSearch}
+              highlightRequest={highlightRequest}
+              highlightRebook={highlightRebook}
+            />
+          </div>
           <div id="booking-section">
             <ServiceBookingBlock
               listingId={params.id}

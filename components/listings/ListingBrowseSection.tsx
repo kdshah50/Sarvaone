@@ -26,6 +26,8 @@ type Props = {
   mapCenterLng: number;
   isDev?: boolean;
   devPendingServicesEnabled?: boolean;
+  /** When set (hero NL search), cards link into quote/chat flow. */
+  searchQuery?: string;
 };
 
 export default function ListingBrowseSection({
@@ -36,6 +38,7 @@ export default function ListingBrowseSection({
   mapCenterLng,
   isDev,
   devPendingServicesEnabled,
+  searchQuery,
 }: Props) {
   const params = useSearchParams();
   const [mode, setMode] = useState<"list" | "map">("list");
@@ -99,6 +102,7 @@ export default function ListingBrowseSection({
           initialCategory={initialCategory}
           isDev={isDev}
           devPendingServicesEnabled={devPendingServicesEnabled}
+          searchQuery={searchQuery}
         />
       ) : (
         <>

@@ -12,6 +12,7 @@ import {
   finalizeConciergeRequest,
   regexExtractConciergeHints,
 } from "@/lib/concierge-intent";
+import { applyHomeTradeRouteToParsed, detectHomeTradeRoute } from "@/lib/home-trades-routing";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY ?? "";
 const CHAT_MODEL = process.env.SEARCH_PARSE_MODEL ?? "gpt-4o-mini";
@@ -31,6 +32,11 @@ export type ParsedQueryFilters = {
   searchCategoryHint?: string;
   /** Optional synonym snippets sellers use; broadens loose ILIKE recall. */
   extraSparseTerms?: string[];
+  /**
+   * Home trades (plumber, HVAC, electrician): scan every service-vertical category_id,
+   * not only the active browse tab — many licensed trades list under `services`.
+   */
+  searchAllServiceVerticals?: boolean;
   /** Structured concierge slot for future booking pipeline; search ignores except debug / separate routes. */
   concierge?: ConciergeRequest;
 };
@@ -194,8 +200,8 @@ Return ONLY valid JSON with keys:
 - max_price_usd: maximum price in whole US dollars (integer), or null if not stated.
 - min_price_usd: minimum price in whole US dollars (integer), or null if not stated.
 - extra_sparse_terms: optional array (max 6) of short EN/ES phrases sellers often use in titles instead of the user's exact words (e.g. "personal yoga trainer" → ["yoga instructor","personal training","clases yoga","entrenador personal"]). Empty array or omit if unnecessary.
-- listing_category_hint: optional single browse category id when intent matches ONE vertical. **Services:** fitness (yoga, trainer, pilates), coaching_training (life coaching, executive coaching, soft-skills training, workshops), tutoring (academic, test prep), beauty, childcare, pet_care, handyman, landscaping. **Goods:** electronics (phones, laptops), vehicles, fashion, home (furniture), sports, realestate. Use null when unclear or mixed intent; use "services" only for generic local help with no clearer vertical.
-- concierge_service_hint: optional staffing-style label ("house cleaning", …), or null — same intent as keyword but for booking.
+- listing_category_hint: optional single browse category id when intent matches ONE vertical. **Services:** fitness (yoga, trainer, pilates), coaching_training (life coaching, executive coaching, soft-skills training, workshops), tutoring (academic, test prep), beauty, childcare, pet_care, handyman (plumber, electrician, HVAC, assembly, general repair), landscaping. **Goods:** electronics (phones, laptops), vehicles, fashion, home (furniture), sports, realestate. Use null when unclear or mixed intent; use "services" only for generic local help with no clearer vertical.
+- concierge_service_hint: optional staffing-style label ("house cleaning", "plumbing", "HVAC repair", "electrical repair", …), or null — same intent as keyword but for booking.
 - concierge_time_hint: optional short phrase as user said for timing ("this Saturday", "Saturday morning"), or null.
 - preferred_weekday: lowercase monday|tuesday|…|sunday only if a single weekday is clear (e.g. "this Saturday" → saturday), else null.
 
@@ -204,6 +210,7 @@ Rules:
 - "Under 500 pesos" in a US context still treat as dollars if no conversion is explicit (use 500).
 - Ignore availability words like "today", "now", "urgent" for price (leave price null unless a number is given).
 - Prose-heavy questions ("who does…?", "what's…?") — still distill keyword_phrase to searchable item plus place if stated.
+- Home repair examples: "broken water heater" → keyword_phrase "water heater HVAC", concierge_service_hint "HVAC repair", listing_category_hint "handyman". "plumber near ZIP 08854" → keyword_phrase "plumber", listing_category_hint "handyman". "fuse panel flickering" → keyword_phrase "electrician fuse panel", listing_category_hint "handyman".
 - Browse tab hint (what the user picked in the UI; do not contradict obvious product intent): ${category}`;
 
   try {
@@ -428,6 +435,26 @@ export function mergeLooseSparseInput(keywordForSparse: string, extras?: string[
   return [base, ...tail].join(" ").replace(/\s+/g, " ").trim();
 }
 
+/** Apply trade routing + concierge merge on top of sparse/LLM filters. */
+function finalizeParsedSearch(
+  parsed: ParsedQueryFilters,
+  rawQuery: string,
+  regexConciergeHints: ReturnType<typeof regexExtractConciergeHints>,
+  fromLlm?: ReturnType<typeof conciergeFromLlmFields>,
+): ParsedQueryFilters {
+  let out = applyHomeTradeRouteToParsed(parsed, rawQuery);
+  const trade = detectHomeTradeRoute(rawQuery);
+  const tradeConcierge = trade ? { serviceHint: trade.serviceHint } : {};
+  const concierge = finalizeConciergeRequest(
+    fromLlm,
+    { ...regexConciergeHints, ...tradeConcierge },
+    out.maxPriceCents,
+    out.minPriceCents,
+  );
+  if (concierge) out = { ...out, concierge };
+  return out;
+}
+
 /** Merge LLM + regex: regex can fill price if LLM omitted; prefer LLM keyword/semantic when present. */
 export async function parseSearchQuery(query: string, category: string): Promise<ParsedQueryFilters> {
   const trimmed = query.trim();
@@ -440,22 +467,19 @@ export async function parseSearchQuery(query: string, category: string): Promise
   const llmResult = await llmParseSearchQuery(trimmed, category);
 
   if (!llmResult) {
-    const concierge = finalizeConciergeRequest(
-      undefined,
-      regexConciergeHints,
-      rx.maxPriceCents,
-      rx.minPriceCents,
-    );
     if (rx.source === "none") {
       const lite = stripConversationalFiller(trimmed);
-      return {
-        ...rx,
-        keywordForSparse: lite || trimmed,
-        textForEmbedding: lite || trimmed,
-        ...(concierge ? { concierge } : {}),
-      };
+      return finalizeParsedSearch(
+        {
+          ...rx,
+          keywordForSparse: lite || trimmed,
+          textForEmbedding: lite || trimmed,
+        },
+        trimmed,
+        regexConciergeHints,
+      );
     }
-    return { ...rx, ...(concierge ? { concierge } : {}) };
+    return finalizeParsedSearch({ ...rx }, trimmed, regexConciergeHints);
   }
 
   const { filters: llm, concierge: llmConciergeFields } = llmResult;
@@ -475,6 +499,7 @@ export async function parseSearchQuery(query: string, category: string): Promise
     minPriceCents: llm.minPriceCents ?? rx.minPriceCents,
     searchCategoryHint: llm.searchCategoryHint,
     extraSparseTerms: llm.extraSparseTerms,
+    searchAllServiceVerticals: llm.searchAllServiceVerticals,
   };
 
   if (merged.maxPriceCents != null && rx.maxPriceCents != null) {
@@ -488,15 +513,8 @@ export async function parseSearchQuery(query: string, category: string): Promise
 
   const fromLlm =
     llmConciergeFields != null ? conciergeFromLlmFields(llmConciergeFields) : undefined;
-  const concierge = finalizeConciergeRequest(
-    fromLlm,
-    regexConciergeHints,
-    merged.maxPriceCents,
-    merged.minPriceCents,
-  );
-  if (concierge) merged.concierge = concierge;
 
-  return merged;
+  return finalizeParsedSearch(merged, trimmed, regexConciergeHints, fromLlm);
 }
 
 export function listingMatchesPriceFilters(

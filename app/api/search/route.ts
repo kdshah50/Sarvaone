@@ -15,8 +15,63 @@ import {
 import { postgrestActiveListingVerificationFragment } from "@/lib/browse-listings-filters";
 import { browseEnabledServiceVerticalIds, isBrowseEnabledCategoryId } from "@/lib/marketplace-categories";
 import { cosineSimilarity, parseStoredEmbedding, similarityScore01 } from "@/lib/search-embedding";
+import { inferProviderSlugFromListingTitle } from "@/lib/infer-listing-provider-slug";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY ?? "";
+
+function listingTrustBoost(listing: Record<string, unknown>): number {
+  let b = 0;
+  if (listing.is_verified === true) b += 0.2;
+  const u = embeddedSellerRow(listing.users as Parameters<typeof embeddedSellerRow>[0]);
+  if (u?.dl_verified || u?.ein_verified) b += 0.1;
+  if (u?.phone_verified) b += 0.05;
+  return b;
+}
+
+function resolveSearchCategoryScope(
+  browseCategory: string,
+  effective: ParsedQueryFilters,
+): { searchCategory: string; categoryFilter: string } {
+  if (browseCategory === "services" && effective.searchAllServiceVerticals) {
+    const ids = browseEnabledServiceVerticalIds();
+    const categoryFilter = ids.length
+      ? `category_id=in.(${ids.map((id) => encodeURIComponent(id)).join(",")})`
+      : `category_id=eq.services`;
+    return { searchCategory: "services", categoryFilter };
+  }
+
+  const searchCategory =
+    browseCategory === "services" &&
+    effective.searchCategoryHint &&
+    isBrowseEnabledCategoryId(effective.searchCategoryHint) &&
+    effective.searchCategoryHint !== "services"
+      ? effective.searchCategoryHint
+      : browseCategory;
+
+  return {
+    searchCategory,
+    categoryFilter: `category_id=eq.${encodeURIComponent(searchCategory)}`,
+  };
+}
+
+function pickTopListingForQuote(results: Record<string, unknown>[]) {
+  if (!results.length) return null;
+  const sorted = [...results].sort((a, b) => {
+    const scoreA = (Number(a._score) || 0) + listingTrustBoost(a);
+    const scoreB = (Number(b._score) || 0) + listingTrustBoost(b);
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    return (Number(a._dist_km) || 9999) - (Number(b._dist_km) || 9999);
+  });
+  const top = sorted[0];
+  const title = String(top.title_en ?? top.title_es ?? "").trim();
+  const u = embeddedSellerRow(top.users as Parameters<typeof embeddedSellerRow>[0]);
+  return {
+    id: String(top.id),
+    title,
+    seller_name: typeof u?.display_name === "string" ? u.display_name : null,
+    provider_slug: inferProviderSlugFromListingTitle(title),
+  };
+}
 
 const ABS_THRESHOLD = 0.20;
 const REL_FACTOR    = 0.60;
@@ -155,12 +210,12 @@ function mergeDensePreferHigherSimilarity(primary: any[], secondary: any[]): any
 async function denseRowsFromStoredEmbeddingsCosine(
   queryVec: number[],
   verifyFrag: string,
-  category: string,
+  categoryFilter: string,
   supaUrl: string,
   hdrs: Record<string, string>,
 ): Promise<any[]> {
   const prefix =
-    `${supaUrl}/rest/v1/listings?${verifyFrag}&category_id=eq.${encodeURIComponent(category)}` +
+    `${supaUrl}/rest/v1/listings?${verifyFrag}&${categoryFilter}` +
     "&embedding=not.is.null";
   let res = await fetch(
     `${prefix}&select=${encodeURIComponent(SELECT_EMBED_FULL)}&limit=240`,
@@ -266,13 +321,7 @@ export async function GET(req: NextRequest) {
       : null;
 
   /** LLM routing from generic Services tab → any browse vertical (Beauty, Electronics, Fitness, …). */
-  const searchCategory =
-    browseCategory === "services" &&
-    effective.searchCategoryHint &&
-    isBrowseEnabledCategoryId(effective.searchCategoryHint) &&
-    effective.searchCategoryHint !== "services"
-      ? effective.searchCategoryHint
-      : browseCategory;
+  const { searchCategory, categoryFilter } = resolveSearchCategoryScope(browseCategory, effective);
 
   const sparseForLoose = mergeLooseSparseInput(sparsePhrase, effective.extraSparseTerms);
 
@@ -312,10 +361,10 @@ export async function GET(req: NextRequest) {
           : `${sparseKw.dimension}=${encodeURIComponent(sparseKw.clause)}&`;
       const core =
         hasPrice && keywordTooShort
-          ? `${supaUrl}/rest/v1/listings?${verifyFrag}&category_id=eq.${searchCategory}&select=${SELECT_COLS_FULL}&order=created_at.desc&limit=24`
+          ? `${supaUrl}/rest/v1/listings?${verifyFrag}&${categoryFilter}&select=${SELECT_COLS_FULL}&order=created_at.desc&limit=24`
           : sparseParam
-            ? `${supaUrl}/rest/v1/listings?${verifyFrag}&category_id=eq.${searchCategory}&${sparseParam}select=${SELECT_COLS_FULL}&limit=48`
-            : `${supaUrl}/rest/v1/listings?${verifyFrag}&category_id=eq.${searchCategory}&select=${SELECT_COLS_FULL}&order=created_at.desc&limit=20`;
+            ? `${supaUrl}/rest/v1/listings?${verifyFrag}&${categoryFilter}&${sparseParam}select=${SELECT_COLS_FULL}&limit=48`
+            : `${supaUrl}/rest/v1/listings?${verifyFrag}&${categoryFilter}&select=${SELECT_COLS_FULL}&order=created_at.desc&limit=20`;
       sparseKeywordStrategy =
         sparseParam.length > 0 ? "strict" : "browse";
       const strictUrl = appendPriceToUrl(core);
@@ -332,7 +381,7 @@ export async function GET(req: NextRequest) {
         (looseKw.dimension !== sparseKw.dimension || looseKw.clause !== sparseKw.clause);
       if (usedKeywordClause && sparseRows.length === 0 && fetched.status < 400 && looseKw != null && clauseDiffers) {
         const looseParam = `${looseKw.dimension}=${encodeURIComponent(looseKw.clause)}&`;
-        const coreLoose = `${supaUrl}/rest/v1/listings?${verifyFrag}&category_id=eq.${searchCategory}&${looseParam}select=${SELECT_COLS_FULL}&limit=48`;
+        const coreLoose = `${supaUrl}/rest/v1/listings?${verifyFrag}&${categoryFilter}&${looseParam}select=${SELECT_COLS_FULL}&limit=48`;
         const looseFetched = await listingRowsFromUrl(appendPriceToUrl(coreLoose));
         sparseKeywordStrategy = "loose";
         sparseHttpStatus = looseFetched.status;
@@ -364,7 +413,7 @@ export async function GET(req: NextRequest) {
           });
         }
 
-        const cosineRows = await denseRowsFromStoredEmbeddingsCosine(vec, verifyFrag, searchCategory, supaUrl, headers);
+        const cosineRows = await denseRowsFromStoredEmbeddingsCosine(vec, verifyFrag, categoryFilter, supaUrl, headers);
         denseCosineCandidates = cosineRows.length;
 
         const merged = mergeDensePreferHigherSimilarity(rpcRows, cosineRows);
@@ -427,7 +476,15 @@ export async function GET(req: NextRequest) {
   fused = fused.filter((l) => listingMatchesPriceFilters(l.price_mxn, effective));
 
   let results = fused
-    .sort((a, b) => b._score - a._score)
+    .map((l) => ({
+      ...l,
+      _score: (Number(l._score) || 0) + listingTrustBoost(l as Record<string, unknown>),
+    }))
+    .sort((a, b) => {
+      const d = (Number(b._score) || 0) - (Number(a._score) || 0);
+      if (d !== 0) return d;
+      return (Number(a._dist_km) || 9999) - (Number(b._dist_km) || 9999);
+    })
     .slice(0, 24);
 
   let browseFallbackUsed = false;
@@ -507,6 +564,8 @@ export async function GET(req: NextRequest) {
 
   await enrichResultsWithSellerUsers(results, supaUrl, headers);
 
+  const topListingQuote = query.trim() ? pickTopListingForQuote(results) : null;
+
   const mode = browseFallbackUsed
     ? "browse_fallback"
     : denseRows.length > 0 && sparseRows.length > 0
@@ -531,6 +590,7 @@ export async function GET(req: NextRequest) {
       browseCategory,
       searchCategoryUsed: searchCategory,
       searchCategoryHint: effective.searchCategoryHint ?? null,
+      searchAllServiceVerticals: effective.searchAllServiceVerticals ?? false,
       extraSparseTerms: effective.extraSparseTerms ?? null,
       keywordForSparse: sparsePhrase,
       textForEmbedding: embedPhrase,
@@ -553,6 +613,7 @@ export async function GET(req: NextRequest) {
     results, mode, query, total: results.length, debug,
     concierge: conciergeEffective ?? null,
     searchCategoryHint: effective.searchCategoryHint ?? null,
+    topListingQuote,
     colonia: coloniaRef
       ? { key: effectiveColoniaSlug, label: coloniaRef.label }
       : null,

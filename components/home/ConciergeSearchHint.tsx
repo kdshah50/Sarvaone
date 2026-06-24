@@ -3,6 +3,14 @@ import type { ConciergeRequest } from "@/lib/concierge-intent";
 import { categoryLabel } from "@/lib/marketplace-categories";
 import { formatUsdCents } from "@/lib/money";
 import type { Lang } from "@/lib/i18n-lang";
+import { listingSearchActionHref } from "@/lib/listing-search-action";
+
+export type TopListingQuote = {
+  id: string;
+  title: string;
+  seller_name: string | null;
+  provider_slug?: string | null;
+};
 
 const VERTICAL_BY_HINT: Record<string, string> = {
   "house cleaning": "/home-cleaning",
@@ -69,14 +77,20 @@ export function ConciergeSearchHint({
   query,
   concierge,
   searchCategoryHint,
+  topListing,
+  shopperLat,
+  shopperLng,
 }: {
   lang: Lang;
   query: string;
   concierge: ConciergeRequest | null | undefined;
   searchCategoryHint?: string | null;
+  topListing?: TopListingQuote | null;
+  shopperLat?: string | null;
+  shopperLng?: string | null;
 }) {
   if (!query.trim()) return null;
-  if (!hasConciergeSignal(concierge) && !searchCategoryHint?.trim()) return null;
+  if (!hasConciergeSignal(concierge) && !searchCategoryHint?.trim() && !topListing) return null;
 
   const service = concierge?.serviceHint?.trim() ?? null;
   const when = concierge ? formatWindow(concierge, lang) : null;
@@ -96,15 +110,41 @@ export function ConciergeSearchHint({
 
   const intro =
     lang === "es"
-      ? "Interpretamos tu búsqueda para conectarte con proveedores verificados — reserva completa próximamente."
+      ? "Interpretamos tu búsqueda para conectarte con proveedores verificados — solicita una cotización en el chat."
       : lang === "hi"
-        ? "हम आपकी खोज को सत्यापित प्रदाताओं से जोड़ने के लिए समझते हैं — पूरी बुकिंग जल्द।"
+        ? "हम आपकी खोज को सत्यापित प्रदाताओं से जोड़ते हैं — चैट में कोट माँगें।"
         : lang === "gu"
-          ? "અમે તમારી શોધને ચકાસાયેલ પ્રદાતાઓ સાથે જોડવા માટે સમજીએ છીએ — સંપૂર્ણ બુકિંગ ટૂંક સમયમાં."
-          : "We interpreted your search to match vetted local providers — full booking flow coming next.";
+          ? "અમે તમારી શોધને ચકાસાયેલ પ્રદાતાઓ સાથે જોડીએ છીએ — ચેટમાં ક્વોટ માંગો."
+          : "We matched your search to vetted local providers — request a quote in chat.";
 
   const browseCta =
-    lang === "es" ? "Ver proveedores abajo" : lang === "hi" ? "नीचे प्रदाता देखें" : lang === "gu" ? "નીચે પ્રદાતાઓ જુઓ" : "Browse providers below";
+    lang === "es" ? "Ver más proveedores" : lang === "hi" ? "और प्रदाता" : lang === "gu" ? "વધુ પ્રદાતાઓ" : "More providers";
+
+  const quoteHref = topListing
+    ? listingSearchActionHref(topListing.id, lang, {
+        lat: shopperLat,
+        lng: shopperLng,
+        providerSlug: topListing.provider_slug,
+        fromQuery: query,
+      })
+    : null;
+
+  const quoteCta =
+    topListing?.seller_name
+      ? lang === "es"
+        ? `Cotización con ${topListing.seller_name}`
+        : lang === "hi"
+          ? `${topListing.seller_name} से कोट`
+          : lang === "gu"
+            ? `${topListing.seller_name} પાસેથી ક્વોટ`
+            : `Request quote — ${topListing.seller_name}`
+      : lang === "es"
+        ? "Solicitar cotización"
+        : lang === "hi"
+          ? "कोट माँगें"
+          : lang === "gu"
+            ? "ક્વોટ માંગો"
+            : "Request quote";
 
   const verticalCta =
     lang === "es"
@@ -183,7 +223,15 @@ export function ConciergeSearchHint({
             )}
           </dl>
           <div className="flex flex-wrap gap-2 mt-3">
-            {verticalLink && service && (
+            {quoteHref && (
+              <Link
+                href={quoteHref}
+                className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1B4332] text-white hover:bg-[#2D6A4F] transition-colors"
+              >
+                {quoteCta} →
+              </Link>
+            )}
+            {verticalLink && service && !quoteHref && (
               <Link
                 href={verticalLink}
                 className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1B4332] text-white hover:bg-[#2D6A4F] transition-colors"

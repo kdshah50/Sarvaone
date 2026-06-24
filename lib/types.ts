@@ -27,6 +27,8 @@ export interface ListingCard {
   /** Distance from shopper/county reference (km); shown as miles in UI. */
   dist_km?: number | null;
   payment_methods: string[] | null;
+  /** Inferred from listing title for quote deep links after search. */
+  provider_slug?: string | null;
 }
 
 export const PAYMENT_METHODS_MX: Record<string, { label: string; icon: string; desc: string }> = {

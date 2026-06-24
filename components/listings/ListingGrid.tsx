@@ -11,6 +11,7 @@ import { DEFAULT_LANG, langFromParam, listingHref, type Lang } from "@/lib/i18n-
 import { formatListingDistanceMi } from "@/lib/listing-distance";
 import { UsdCents } from "@/components/UsdAmount";
 import { isServiceVerticalCategory, normalizeBrowseCategory } from "@/lib/marketplace-categories";
+import { listingSearchActionHref } from "@/lib/listing-search-action";
 
 type Props = {
   listings: ListingCard[];
@@ -22,6 +23,7 @@ type Props = {
   isDev?: boolean;
   /** From server: dev + `SHOW_PENDING_SERVICES=true` — browse already includes unverified services. */
   devPendingServicesEnabled?: boolean;
+  searchQuery?: string;
 };
 
 export default function ListingGrid({
@@ -30,10 +32,12 @@ export default function ListingGrid({
   initialCategory,
   isDev = false,
   devPendingServicesEnabled = false,
+  searchQuery,
 }: Props) {
   const params = useSearchParams();
   const [lang, setLang] = useState<Lang>(initialLang);
   const [categorySlug, setCategorySlug] = useState(() => normalizeBrowseCategory(initialCategory));
+  const activeSearchQuery = (searchQuery ?? params.get("q") ?? "").trim();
 
   useEffect(() => {
     setLang(langFromParam(params.get("lang")));
@@ -175,14 +179,28 @@ export default function ListingGrid({
 
   const negotiableHint = lang === "es" ? "· negociable" : "· negotiable";
 
-  const listingDetailHref = (listingId: string) => {
-    const base = listingHref(listingId, lang);
+  const listingDetailHref = (listing: ListingCard) => {
     const lat = params.get("lat");
     const lng = params.get("lng");
+    const isServiceVertical = isServiceVerticalCategory(categorySlug);
+    if (activeSearchQuery && isServiceVertical) {
+      return listingSearchActionHref(listing.id, lang, {
+        lat,
+        lng,
+        providerSlug: listing.provider_slug,
+        fromQuery: activeSearchQuery,
+      });
+    }
+    const base = listingHref(listing.id, lang);
     if (!lat || !lng) return base;
     const sep = base.includes("?") ? "&" : "?";
     return `${base}${sep}lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`;
   };
+
+  const quoteChipLabel =
+    lang === "es" ? "Solicitar cotización" : lang === "hi" ? "कोट माँगें" : lang === "gu" ? "ક્વોટ" : "Request quote";
+
+  const isServiceVertical = isServiceVerticalCategory(categorySlug);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -191,7 +209,7 @@ export default function ListingGrid({
         return (
         <Link
           key={listing.id}
-          href={listingDetailHref(listing.id)}
+          href={listingDetailHref(listing)}
           className="group block"
         >
           <div className="bg-white rounded-2xl overflow-hidden border border-[#E5E0D8] hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
@@ -221,6 +239,11 @@ export default function ListingGrid({
                   </span>
                 )}
               </div>
+              {activeSearchQuery && isServiceVertical && (
+                <span className="absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded-full bg-[#D4A017] text-[#1B4332] shadow-sm">
+                  {quoteChipLabel}
+                </span>
+              )}
             </div>
 
             <div className="p-4">

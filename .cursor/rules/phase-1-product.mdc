@@ -1,0 +1,31 @@
+---
+description: AISaravanna Phase 1 product pillars — concierge, tutoring, tax/benefits
+alwaysApply: true
+---
+
+# Phase 1 product strategy (remember)
+
+Middlesex-centered **AI-augmented** marketplace layers. Prefer features, copy, and county demos that reinforce these three tracks.
+
+## 1. AI Home Services Concierge
+
+- **Promise:** Residents describe a home problem in plain language → match **vetted** local trades (**plumbers, HVAC, electricians**) with **scheduling** wired in where the product supports it.
+- **Why Middlesex:** ~1 in 5 residents face **severe housing problems** (Demand; cite **Data USA** when discussing rationale).
+- **Positioning:** **AI-native** discovery + booking path; emphasize low competition vs traditional lead-gen.
+- **Code alignment:** County chips + categories already touch **handyman**, **HVAC**, **plumbing**, **electrical** (Middlesex catalog); broaden **verification + booking** UX and NL routing for “broken water heater”, “fuse panel”, etc.
+
+## 2. AI Tutoring & Academic Assistant
+
+- **Promise:** Personalized, **multilingual** AI tutoring (**K–12** and college); strong fit for Rutgers and dense student households in Middlesex.
+- **Differentiator:** **Multilingual-first** (**Hindi, Spanish, Mandarin**). App already supports **Spanish** broadly and **Hindi/Gujarati** for listing/category copy in places — **expand deliberately** toward tutoring flows; treat **Mandarin** as a planned locale where product allows.
+- **Code alignment:** **`tutoring`** and **`coaching_training`** verticals; embeddings + concierge-style parsing should favor academic vs professional-coaching intents.
+
+## 3. AI Tax & Benefits Navigator
+
+- **Promise:** Assistant for **NJ tax credits**, **benefits eligibility**, and **FAFSA** navigation — **freemium → paid** funnel.
+- **Why Middlesex:** ~**8.59%** below poverty line; many middle-income households underclaim credits (Demand; cite **Data USA**).
+- **Code alignment:** **Not yet a first-class surface** in the marketplace shell — introduce as dedicated **education/concierge** flow (routes, disclaimers “not legal/tax advice”), opt-in intake, optional hand-off to verified pros — without blocking Phases 1.1–1.2 shipping.
+
+---
+
+When prioritizing backlog, weigh **CountyServiceCatalog**, **FAQ**, **`/api/search`** hints, and **verification** narratives against these three pillars unless the user steers elsewhere.
