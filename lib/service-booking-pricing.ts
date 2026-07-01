@@ -2,7 +2,7 @@ import {
   effectiveListingPriceMxnCents,
 } from "@/lib/package-pricing";
 
-/** Sanity cap: 500,000 MXN per agreed job base (centavos). */
+/** Sanity cap: $500,000 USD per agreed job base (stored as cents). */
 export const MAX_SERVICE_PRICING_BASE_MXN_CENTS = 50_000_000;
 
 export type AgreedGateRow = {

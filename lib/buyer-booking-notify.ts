@@ -4,6 +4,7 @@ import { expandUserAccountIdPool } from "@/lib/user-account-pool";
 import { canonicalizeAuthPhone, normalizeAuthPhone } from "@/lib/phone";
 import { sendWhatsAppToE164Digits } from "@/lib/twilio";
 import { getPublicAppUrl } from "@/lib/app-url";
+import { formatUsdCents } from "@/lib/money";
 
 const STALE_NOTIFY_CLAIM_MS = 3 * 60 * 1000;
 
@@ -117,7 +118,7 @@ export async function notifyBuyerBookingCommissionPaid(supabase: SupabaseClient,
     const noteLine = row.note ? `Tu mensaje al proveedor: «${truncate(String(row.note), 220)}»` : "";
     const confirmedLine = `Confirmada: ${formatConfirmedEs(row.paid_at)}`;
     const appUrl = getPublicAppUrl();
-    const feeMx = Math.round((row.commission_amount_cents ?? 0) / 100);
+    const feeFmt = formatUsdCents(row.commission_amount_cents ?? 0, "es");
     const supportUrl = `${appUrl}/claims`;
     const bookingUrl = `${appUrl}/booking/success?id=${row.id}`;
     const myBookingsUrl = `${appUrl}/my-bookings`;
@@ -126,7 +127,7 @@ export async function notifyBuyerBookingCommissionPaid(supabase: SupabaseClient,
       : `Referencia: ${row.id.slice(0, 8)}…`;
 
     const msg = [
-      `✅ *Reserva confirmada — Naranjogo*`,
+      `✅ *Reserva confirmada — AISaravanna*`,
       ``,
       ticketLine,
       ``,
@@ -135,12 +136,12 @@ export async function notifyBuyerBookingCommissionPaid(supabase: SupabaseClient,
       ``,
       `👤 Proveedor: *${providerName}*`,
       `📅 ${confirmedLine}`,
-      `💳 Tarifa plataforma pagada: ~$${feeMx.toLocaleString("es-MX")} MXN`,
+      `💳 Tarifa plataforma pagada: ~${feeFmt}`,
       ...(noteLine ? [``, noteLine] : []),
       ``,
       `Confirma fecha y hora exactas por WhatsApp con tu proveedor.`,
       ``,
-      `*Garantía:* aplicación y posibles reembolsos solo si reservaste y pagaste *en Naranjogo*: ${supportUrl}`,
+      `*Garantía:* aplicación y posibles reembolsos solo si reservaste y pagaste *en AISaravanna*: ${supportUrl}`,
       ``,
       `Seguimiento (ticket + estado): ${myBookingsUrl}`,
       ``,

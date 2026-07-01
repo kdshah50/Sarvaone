@@ -39,13 +39,13 @@ const UI = {
     send: "Enviar",
     agreedTitle: "Precio acordado del trabajo (este comprador)",
     agreedHelp:
-      "Opcional: total del trabajo en MXN. Si no lo pones, se usa el precio del anuncio o paquete. El comprador paga la tarifa de Naranjogo sobre este monto, o el servicio completo si activaste cobros con Stripe.",
+      "Opcional: total del trabajo en USD. Si no lo pones, se usa el precio del anuncio o paquete. El comprador paga la tarifa de la plataforma sobre este monto, o el servicio completo si activaste cobros con Stripe.",
     agreedPh: "ej. 850",
     agreedSave: "Guardar",
     agreedClear: "Quitar",
     agreedSaved: "Guardado",
     agreedLoading: "Cargando precio acordado…",
-    invalidAmount: "Monto inválido (mín. $1 MXN).",
+    invalidAmount: "Monto inválido (mín. $1 USD).",
     payOnListing: "Ir al anuncio para pagar depósito",
   },
   en: {
@@ -59,13 +59,13 @@ const UI = {
     send: "Send",
     agreedTitle: "Agreed job total (this buyer)",
     agreedHelp:
-      "Optional: total for this job in MXN. If empty, the listing or package price is used. Buyer pays the Naranjogo fee on this amount, or the full service in-app if you enabled Stripe payouts.",
+      "Optional: total for this job in USD. If empty, the listing or package price is used. Buyer pays the platform fee on this amount, or the full service in-app if you enabled Stripe payouts.",
     agreedPh: "e.g. 850",
     agreedSave: "Save",
     agreedClear: "Clear",
     agreedSaved: "Saved",
     agreedLoading: "Loading agreed total…",
-    invalidAmount: "Enter a valid amount (at least $1 MXN).",
+    invalidAmount: "Enter a valid amount (at least $1 USD).",
     payOnListing: "Go to listing to pay deposit",
   },
 } as const;
@@ -497,7 +497,7 @@ export default function ConversationThread({
           <p className="text-[#92400E] leading-snug">{u.agreedHelp}</p>
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex-1 min-w-[120px]">
-              <span className="sr-only">MXN</span>
+              <span className="sr-only">USD</span>
               <input
                 type="text"
                 inputMode="decimal"

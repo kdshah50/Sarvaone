@@ -57,7 +57,7 @@ export default function ServiceMenuEditor({
           <div className="hidden sm:grid sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_5rem_2rem] gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#92400E]">
             <span>{copy.colEs}</span>
             <span>{copy.colEn}</span>
-            <span>MXN</span>
+            <span>USD</span>
             <span />
           </div>
           {rows.map((row, i) => (

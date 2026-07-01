@@ -7,6 +7,7 @@ import { phoneDigitsForAccountPool } from "@/lib/user-phone-notify";
 import { sendWhatsAppToE164Digits, isTwilioWhatsAppConfigured } from "@/lib/twilio";
 import { hasSellerPhaseNotify, recordSellerPhaseNotify } from "@/lib/booking-lifecycle";
 import { listingChatAbsoluteUrl, findListingConversationIdForBuyer } from "@/lib/listing-chat-deep-link";
+import { formatUsdCents } from "@/lib/money";
 
 export type SellerPhaseWhatsAppResult =
   | { delivered: true }
@@ -213,7 +214,7 @@ export async function notifySellerBookingCompleted(
   const balancePending =
     String(booking.balance_payment_status ?? "") === "pending" && balanceCents >= 100;
   const balanceLine = balancePending
-    ? `El cliente recibirá enlace para pagar el saldo (~$${Math.round(balanceCents / 100).toLocaleString("es-MX")} MXN) en la app.`
+    ? `El cliente recibirá enlace para pagar el saldo (~${formatUsdCents(balanceCents, "es")}) en la app.`
     : null;
 
   const body = [

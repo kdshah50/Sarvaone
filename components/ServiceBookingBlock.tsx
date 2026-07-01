@@ -13,6 +13,7 @@ import ServiceQuoteBuyerPanel from "@/components/ServiceQuoteBuyerPanel";
 import { serviceBookingCopy } from "@/lib/service-booking-copy";
 import HousekeepingBookingPayments from "@/components/HousekeepingBookingPayments";
 import { providerServiceSupportsSupplementPayments } from "@/lib/provider-services";
+import { formatUsdCents } from "@/lib/money";
 
 type PaidDetail = {
   pricingBaseMxnCents?: number | null;
@@ -74,12 +75,8 @@ type BookingState = {
   } | null;
 };
 
-function formatMXN(cents: number, lang: UiLang): string {
-  return new Intl.NumberFormat(intlLocale(lang), {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(cents / 100);
+function formatUSD(cents: number, lang: UiLang): string {
+  return formatUsdCents(cents, lang);
 }
 
 function paidBookingStatusCaption(status: string | null | undefined, lang: UiLang): string {
@@ -632,7 +629,7 @@ export default function ServiceBookingBlock({
             </p>
             <p>
               <strong>{listingLang === "en" ? "Total for the plan:" : "Total del plan:"}</strong>{" "}
-              {formatMXN(booking.packageTotalMxnCents, listingLang)}{" "}
+              {formatUSD(booking.packageTotalMxnCents, listingLang)}{" "}
               {listingLang === "en"
                 ? "— platform fee below is calculated on this agreed amount (one payment unlocks the whole plan)."
                 : "— la tarifa de plataforma abajo se calcula sobre este monto (un solo pago desbloquea todo el plan)."}
@@ -654,26 +651,26 @@ export default function ServiceBookingBlock({
             listingLang === "en" ? (
               <>
                 One <strong>platform fee</strong> covers all <strong>{booking.packageSessionCount} visits</strong> in the
-                approved plan (commission on the plan total, min. $10 MXN). Stay on Naranjogo for loyalty, guarantee, and
+                approved plan (commission on the plan total, min. $10 USD). Stay on AISaravanna for loyalty, guarantee, and
                 follow-up bookings—like a multi-visit or monthly rhythm without paying list price each time.
               </>
             ) : (
               <>
                 Una sola <strong>tarifa de plataforma</strong> cubre las{" "}
                 <strong>{booking.packageSessionCount} visitas</strong> del plan aprobado (comisión sobre el total del plan,
-                mín. $10 MXN). Sigue en Naranjogo: lealtad, garantía y re-reservas — ideal si vas varias veces al mes.
+                mín. $10 USD). Sigue en AISaravanna: lealtad, garantía y re-reservas — ideal si vas varias veces al mes.
               </>
             )
           ) : isService ? (
             listingLang === "en" ? (
               <>
                 The price is agreed directly with your provider. You only pay Naranjogo&apos;s{" "}
-                <strong>platform fee</strong> here (~commission; minimum $10 MXN via Stripe) to continue booking.
+                <strong>platform fee</strong> here (~commission; minimum $10 USD via Stripe) to continue booking.
               </>
             ) : (
               <>
                 El precio del anuncio lo acuerdas con el proveedor. Aquí solo pagas la{" "}
-                <strong>tarifa de la plataforma</strong> (~comisión; mín. $10 MXN por Stripe) para seguir con la reserva.
+                <strong>tarifa de la plataforma</strong> (~comisión; mín. $10 USD por Stripe) para seguir con la reserva.
               </>
             )
           ) : (
@@ -703,13 +700,13 @@ export default function ServiceBookingBlock({
           <span>
             {booking.hasPackage
               ? listingLang === "en"
-                ? `Pay one platform fee for the full plan (${formatMXN(booking.commissionAmountCents, listingLang)})`
-                : `Paga una tarifa para todo el plan (${formatMXN(booking.commissionAmountCents, listingLang)})`
+                ? `Pay one platform fee for the full plan (${formatUSD(booking.commissionAmountCents, listingLang)})`
+                : `Paga una tarifa para todo el plan (${formatUSD(booking.commissionAmountCents, listingLang)})`
               : listingLang === "en"
                 ? isService
-                  ? `Pay the service fee (${formatMXN(booking.commissionAmountCents, listingLang)})`
-                  : `Pay the connection fee (${formatMXN(booking.commissionAmountCents, listingLang)})`
-                : `Paga la tarifa ${isService ? "de servicio" : "de conexión"} (${formatMXN(booking.commissionAmountCents, listingLang)})`}
+                  ? `Pay the service fee (${formatUSD(booking.commissionAmountCents, listingLang)})`
+                  : `Pay the connection fee (${formatUSD(booking.commissionAmountCents, listingLang)})`
+                : `Paga la tarifa ${isService ? "de servicio" : "de conexión"} (${formatUSD(booking.commissionAmountCents, listingLang)})`}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -869,12 +866,12 @@ export default function ServiceBookingBlock({
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 leading-relaxed">
                 {listingLang === "en" ? (
                   <>
-                    <strong>Official quote total:</strong> {formatMXN(booking.agreedSubtotalMxnCents, listingLang)} — platform
+                    <strong>Official quote total:</strong> {formatUSD(booking.agreedSubtotalMxnCents, listingLang)} — platform
                     fee below is calculated on this amount.
                   </>
                 ) : (
                   <>
-                    <strong>Total de cotización oficial:</strong> {formatMXN(booking.agreedSubtotalMxnCents, listingLang)} — la
+                    <strong>Total de cotización oficial:</strong> {formatUSD(booking.agreedSubtotalMxnCents, listingLang)} — la
                     tarifa de plataforma abajo se calcula sobre este monto.
                   </>
                 )}
@@ -888,12 +885,12 @@ export default function ServiceBookingBlock({
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 leading-relaxed">
                 {listingLang === "en" ? (
                   <>
-                    <strong>Agreed job total:</strong> {formatMXN(booking.agreedSubtotalMxnCents, listingLang)} (set by your provider).
+                    <strong>Agreed job total:</strong> {formatUSD(booking.agreedSubtotalMxnCents, listingLang)} (set by your provider).
                     Platform fee is calculated on this amount.
                   </>
                 ) : (
                   <>
-                    <strong>Precio acordado del trabajo:</strong> {formatMXN(booking.agreedSubtotalMxnCents, listingLang)} (fijado por tu
+                    <strong>Precio acordado del trabajo:</strong> {formatUSD(booking.agreedSubtotalMxnCents, listingLang)} (fijado por tu
                     proveedor). La tarifa de Naranjogo se calcula sobre este monto.
                   </>
                 )}
@@ -1004,23 +1001,23 @@ export default function ServiceBookingBlock({
               <div className="text-xs text-[#374151] space-y-1">
                 <div className="flex justify-between gap-2">
                   <span className="text-[#6B7280]">{listingLang === "en" ? "Service" : "Servicio"}</span>
-                  <span className="font-tabular-nums">{formatMXN(booking.fullConnectPreview.subtotalCents, listingLang)}</span>
+                  <span className="font-tabular-nums">{formatUSD(booking.fullConnectPreview.subtotalCents, listingLang)}</span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-[#6B7280]">
                     {listingLang === "en" ? "Platform fee" : "Tarifa plataforma"} ({booking.commissionPct}%)
                   </span>
-                  <span className="font-tabular-nums">{formatMXN(booking.fullConnectPreview.commissionCents, listingLang)}</span>
+                  <span className="font-tabular-nums">{formatUSD(booking.fullConnectPreview.commissionCents, listingLang)}</span>
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-[#6B7280]">
                     IVA ({booking.fullConnectPreview.vatPercent}%)
                   </span>
-                  <span className="font-tabular-nums">{formatMXN(booking.fullConnectPreview.vatCents, listingLang)}</span>
+                  <span className="font-tabular-nums">{formatUSD(booking.fullConnectPreview.vatCents, listingLang)}</span>
                 </div>
                 <div className="flex justify-between gap-2 pt-1 border-t border-[#E5E0D8] font-bold text-[#1C1917]">
                   <span>{listingLang === "en" ? "You pay" : "Pagas"}</span>
-                  <span className="font-tabular-nums text-base">{formatMXN(booking.fullConnectPreview.totalCents, listingLang)}</span>
+                  <span className="font-tabular-nums text-base">{formatUSD(booking.fullConnectPreview.totalCents, listingLang)}</span>
                 </div>
               </div>
             </div>
@@ -1036,20 +1033,20 @@ export default function ServiceBookingBlock({
                   {booking.commissionBeforeLoyaltyCents != null &&
                     booking.commissionBeforeLoyaltyCents > booking.commissionAmountCents && (
                       <p className="text-sm text-[#9CA3AF] line-through decoration-[#9CA3AF]">
-                        {formatMXN(booking.commissionBeforeLoyaltyCents, listingLang)}
+                        {formatUSD(booking.commissionBeforeLoyaltyCents, listingLang)}
                       </p>
                     )}
-                  <p className="text-lg font-bold text-[#1C1917]">{formatMXN(booking.commissionAmountCents, listingLang)}</p>
+                  <p className="text-lg font-bold text-[#1C1917]">{formatUSD(booking.commissionAmountCents, listingLang)}</p>
                 </div>
                 {booking.loyaltyDiscountCents != null && booking.loyaltyDiscountCents > 0 && (
                   <p className="text-[11px] text-emerald-700 font-semibold mt-1">
                     {listingLang === "en"
-                      ? `You save ${formatMXN(booking.loyaltyDiscountCents, listingLang)} on the fee.`
-                      : `Ahorras ${formatMXN(booking.loyaltyDiscountCents, listingLang)} en la tarifa.`}
+                      ? `You save ${formatUSD(booking.loyaltyDiscountCents, listingLang)} on the fee.`
+                      : `Ahorras ${formatUSD(booking.loyaltyDiscountCents, listingLang)} en la tarifa.`}
                   </p>
                 )}
               </div>
-              <span className="text-xs text-[#6B7280] shrink-0">MXN</span>
+              <span className="text-xs text-[#6B7280] shrink-0">USD</span>
             </div>
           )}
 
@@ -1083,11 +1080,11 @@ export default function ServiceBookingBlock({
                   {listingLang === "en" ? (
                     <>
                       <strong>Saldo Naranjo</strong> — available{" "}
-                      {formatMXN(walletBalanceCents ?? 0, listingLang)}
+                      {formatUSD(walletBalanceCents ?? 0, listingLang)}
                       {!walletCanPay && (
                         <>
                           {" "}
-                          (need {formatMXN(booking.commissionAmountCents, listingLang)} —{" "}
+                          (need {formatUSD(booking.commissionAmountCents, listingLang)} —{" "}
                           <Link href="/saldo" className="underline font-medium">
                             top up
                           </Link>
@@ -1098,11 +1095,11 @@ export default function ServiceBookingBlock({
                   ) : (
                     <>
                       <strong>Saldo Naranjo</strong> — disponible{" "}
-                      {formatMXN(walletBalanceCents ?? 0, listingLang)}
+                      {formatUSD(walletBalanceCents ?? 0, listingLang)}
                       {!walletCanPay && (
                         <>
                           {" "}
-                          (faltan {formatMXN(booking.commissionAmountCents, listingLang)} —{" "}
+                          (faltan {formatUSD(booking.commissionAmountCents, listingLang)} —{" "}
                           <Link href="/saldo" className="underline font-medium">
                             cargar saldo
                           </Link>
@@ -1129,26 +1126,26 @@ export default function ServiceBookingBlock({
               : paymentMethod === "wallet" && checkoutMode === "commission_only"
                 ? listingLang === "en"
                   ? requiresQuote
-                    ? `Pay deposit ${formatMXN(booking.commissionAmountCents, listingLang)} with Saldo`
-                    : `Pay ${formatMXN(booking.commissionAmountCents, listingLang)} with Saldo`
+                    ? `Pay deposit ${formatUSD(booking.commissionAmountCents, listingLang)} with Saldo`
+                    : `Pay ${formatUSD(booking.commissionAmountCents, listingLang)} with Saldo`
                   : requiresQuote
-                    ? `Pagar depósito ${formatMXN(booking.commissionAmountCents, listingLang)} con Saldo`
-                    : `Pagar ${formatMXN(booking.commissionAmountCents, listingLang)} con Saldo`
+                    ? `Pagar depósito ${formatUSD(booking.commissionAmountCents, listingLang)} con Saldo`
+                    : `Pagar ${formatUSD(booking.commissionAmountCents, listingLang)} con Saldo`
                 : checkoutMode === "full_connect" && booking.fullConnectPreview
                 ? listingLang === "en"
-                  ? `Pay ${formatMXN(booking.fullConnectPreview.totalCents, listingLang)} (full checkout)`
-                  : `Pagar ${formatMXN(booking.fullConnectPreview.totalCents, listingLang)} (total)`
+                  ? `Pay ${formatUSD(booking.fullConnectPreview.totalCents, listingLang)} (full checkout)`
+                  : `Pagar ${formatUSD(booking.fullConnectPreview.totalCents, listingLang)} (total)`
                 : isService
                   ? listingLang === "en"
                     ? requiresQuote
-                      ? `Pay deposit ${formatMXN(booking.commissionAmountCents, listingLang)}`
-                      : `Pay ${formatMXN(booking.commissionAmountCents, listingLang)}`
+                      ? `Pay deposit ${formatUSD(booking.commissionAmountCents, listingLang)}`
+                      : `Pay ${formatUSD(booking.commissionAmountCents, listingLang)}`
                     : requiresQuote
-                      ? `Pagar depósito ${formatMXN(booking.commissionAmountCents, listingLang)}`
-                      : `Pagar ${formatMXN(booking.commissionAmountCents, listingLang)}`
+                      ? `Pagar depósito ${formatUSD(booking.commissionAmountCents, listingLang)}`
+                      : `Pagar ${formatUSD(booking.commissionAmountCents, listingLang)}`
                   : listingLang === "en"
-                    ? `Pay ${formatMXN(booking.commissionAmountCents, listingLang)}`
-                    : `Pagar ${formatMXN(booking.commissionAmountCents, listingLang)}`}
+                    ? `Pay ${formatUSD(booking.commissionAmountCents, listingLang)}`
+                    : `Pagar ${formatUSD(booking.commissionAmountCents, listingLang)}`}
           </button>
 
           <p className="text-center text-xs text-[#6B7280]">

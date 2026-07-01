@@ -9,6 +9,7 @@ import {
   computeHousekeepingQuoteTotals,
   housekeepingAgreedPriceCents,
 } from "@/lib/listing-service-menu";
+import { formatUsdCents } from "@/lib/money";
 
 export const SERVICE_QUOTE_STATUSES = ["none", "pending", "accepted", "declined"] as const;
 export type ServiceQuoteStatus = (typeof SERVICE_QUOTE_STATUSES)[number];
@@ -117,12 +118,9 @@ export function lineItemsFromCart(menu: ServiceMenu | null | undefined, cartLine
   return out;
 }
 
+/** Format quote/booking amounts stored as USD cents (legacy param name). */
 export function formatMxn(cents: number, lang: "es" | "en" = "es"): string {
-  return new Intl.NumberFormat(lang === "en" ? "en-MX" : "es-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 0,
-  }).format(cents / 100);
+  return formatUsdCents(cents, lang);
 }
 
 export function buildMenuQuoteMessage(opts: {

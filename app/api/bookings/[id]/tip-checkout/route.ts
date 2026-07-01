@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const tipMxnCents = Math.round(Number((json as { tipMxnCents?: unknown }).tipMxnCents));
 
     if (!Number.isFinite(tipMxnCents) || tipMxnCents < 100 || tipMxnCents > MAX_TIP_CENTS) {
-      return NextResponse.json({ error: "Propina inválida (mín. $1 MXN)" }, { status: 400 });
+      return NextResponse.json({ error: "Propina inválida (mín. $1 USD)" }, { status: 400 });
     }
 
     const supabase = createAdminSupabase();

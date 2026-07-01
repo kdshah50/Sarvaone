@@ -160,7 +160,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!Number.isFinite(n) || n < 100 || n > MAX_SERVICE_PRICING_BASE_MXN_CENTS) {
       return NextResponse.json(
         {
-          error: `Monto inválido (usa centavos enteros entre 100 y ${MAX_SERVICE_PRICING_BASE_MXN_CENTS})`,
+          error: `Monto inválido (usa centavos USD enteros entre 100 y ${MAX_SERVICE_PRICING_BASE_MXN_CENTS})`,
         },
         { status: 400 },
       );

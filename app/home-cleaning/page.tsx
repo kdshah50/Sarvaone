@@ -3,6 +3,7 @@ import Link from "next/link";
 import { housekeepingStarterMenu } from "@/lib/listing-service-menu";
 import { HOUSEKEEPING_SERVICE } from "@/lib/provider-services";
 import { langFromParam, langForUiCopy, type UiLang } from "@/lib/i18n-lang";
+import { formatUsdCents } from "@/lib/money";
 
 const COPY: Record<
   UiLang,
@@ -216,11 +217,7 @@ export default function LimpiezaDelHogarLandingPage({
   const lang = langForUiCopy(langFromParam(searchParams?.lang));
   const t = COPY[lang];
   const menu = housekeepingStarterMenu();
-  const peso = new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
+  const fmtPrice = (cents: number) => formatUsdCents(cents, lang);
   const otherLang: UiLang = lang === "es" ? "en" : "es";
 
   const signupHref = `/unete?service=${HOUSEKEEPING_SERVICE}&lang=${lang}`;
@@ -339,7 +336,7 @@ export default function LimpiezaDelHogarLandingPage({
                     {(lang === "en" && it.name_en) || it.name_es}
                   </span>
                   <span className="text-[#1E40AF] font-bold tabular-nums shrink-0">
-                    {peso.format(it.price_mxn_cents / 100)}
+                    {fmtPrice(it.price_mxn_cents)}
                   </span>
                 </li>
               ))}

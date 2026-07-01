@@ -1,5 +1,5 @@
 {
-  "name": "aisaravanna",
+  "name": "sarvaone",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "test:messaging": "npx --yes tsx scripts/test-messaging.ts",
-    "test:messaging:smoke": "npx --yes tsx scripts/test-messaging.ts --smoke"
+    "test:messaging:smoke": "npx --yes tsx scripts/test-messaging.ts --smoke",
+    "test:e2e": "npx --yes tsx scripts/test-service-booking-e2e.ts",
+    "test:e2e:smoke": "npx --yes tsx scripts/test-service-booking-e2e.ts --smoke"
   },
   "dependencies": {
     "@sentry/nextjs": "^8.55.1",

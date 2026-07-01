@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatUsdCents } from "@/lib/money";
 import { balancePayable, tipPayable } from "@/lib/housekeeping-payments";
 import {
   supplementAppointmentLabel,
@@ -26,11 +27,7 @@ type Props = {
 };
 
 function fmt(cents: number, lang: "es" | "en") {
-  return new Intl.NumberFormat(lang === "es" ? "es-MX" : "en-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 0,
-  }).format(cents / 100);
+  return formatUsdCents(cents, lang);
 }
 
 const TIP_PRESETS = [1500, 2000, 3000, 5000] as const;
@@ -89,7 +86,7 @@ export default function HousekeepingBookingPayments({
           tipTitle: "Propina (opcional)",
           tipPaid: "Propina enviada",
           tipPreset: "Elegir propina",
-          tipCustom: "Otra cantidad (MXN)",
+          tipCustom: "Otra cantidad (USD)",
           payTip: "Enviar propina",
           appointment: supplementAppointmentLabel(providerSlug, lang),
           connectBlock:
@@ -108,7 +105,7 @@ export default function HousekeepingBookingPayments({
           tipTitle: "Tip (optional)",
           tipPaid: "Tip sent",
           tipPreset: "Choose a tip",
-          tipCustom: "Custom amount (MXN)",
+          tipCustom: "Custom amount (USD)",
           payTip: "Send tip",
           appointment: supplementAppointmentLabel(providerSlug, lang),
           connectBlock:

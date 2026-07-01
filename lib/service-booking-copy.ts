@@ -24,7 +24,7 @@ export const SERVICE_BOOKING_COPY = {
     refreshBusy: "Actualizando…",
     refreshBtn: "Ya envié mi mensaje — actualizar",
     goodsFeeBlurb:
-      "El precio del artículo lo acuerdas con el vendedor (o pagas fuera de la app). Aquí solo pagas la tarifa de conexión de Naranjogo (comisión; mín. $10 MXN) para continuar en la app.",
+      "El precio del artículo lo acuerdas con el vendedor (o pagas fuera de la app). Aquí solo pagas la tarifa de conexión de AISaravanna (comisión; mín. $10 USD) para continuar en la app.",
     packageScheduleHint:
       "Coordina cada cita en los mensajes de la app. Para seguimiento y nuevas reservas, usa Naranjogo: ahí aplican tus descuentos por lealtad y la garantía.",
     checkoutErr: "Error al crear pago",
@@ -51,7 +51,7 @@ export const SERVICE_BOOKING_COPY = {
     refreshBusy: "Refreshing…",
     refreshBtn: "I sent my message — refresh",
     goodsFeeBlurb:
-      "You agree the item price with the seller (or pay off-platform). Here you only pay Naranjogo’s connection fee (commission; min. $10 MXN) to continue in the app.",
+      "You agree the item price with the seller (or pay off-platform). Here you only pay AISaravanna’s connection fee (commission; min. $10 USD) to continue in the app.",
     packageScheduleHint:
       "Schedule each visit in app messages. Rebook follow-ups through Naranjogo to keep discounts and guarantee coverage.",
     checkoutErr: "Could not start checkout",

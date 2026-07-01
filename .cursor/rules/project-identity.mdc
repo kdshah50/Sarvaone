@@ -1,12 +1,12 @@
 ---
-description: This repo is AISaravanna only — not naranjogo3
+description: This repo is Sarvaone (AI Saravanna product) — not naranjogo3
 alwaysApply: true
 ---
 
 # Project identity
 
-- **This workspace is AISaravanna** (package name `aisaravanna`). US-first; English default UI, Spanish via `?lang=es` or the header toggle.
-- **Git:** The only remote should be `origin` → `https://github.com/kdshah50/AISarvanna.git`. Do not add or push to `naranjogo3` or other remotes unless the user explicitly asks.
-- **Docs / examples:** Copy-pasted URLs or names mentioning “naranjogo” may be legacy examples only; default git and release targets are **AISaravanna** (GitHub folder may still be `AISarvanna`).
-- **Deploy / CI:** The Next.js app is intended for **Vercel** (GitHub → Vercel). **Do not add or assume GitLab CI** for this repo unless the user explicitly asks.
-- **Database:** Env must point to an **AISaravanna-dedicated Supabase project** — never the Mexico marketplace Supabase URL/keys unless the user explicitly says to share them.
+- **Product / workspace name: Sarvaone** (npm package `sarvaone`). US-first; English default UI, Spanish via `?lang=es` or the header toggle. Legacy copy may still say “AISaravanna” in places until rebranded.
+- **Production domain:** `https://sarvaone.com` (`NEXT_PUBLIC_APP_URL`).
+- **Git:** The only remote should be `origin` → `https://github.com/kdshah50/Sarvaone.git`. Do not add or push to `naranjogo3` or other remotes unless the user explicitly asks.
+- **Deploy / CI:** Next.js on **Vercel** (GitHub → Vercel project **sarvaone**). **Do not add or assume GitLab CI** unless the user explicitly asks.
+- **Database:** Env must point to a **Sarvaone-dedicated Supabase project** — never the Mexico marketplace Supabase URL/keys unless the user explicitly says to share them.

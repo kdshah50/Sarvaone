@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { formatUsdCents } from "@/lib/money";
 import { taxiRideShareStarterMenu } from "@/lib/listing-service-menu";
 import { TRANSPORT_APP_SERVICE } from "@/lib/provider-services";
 import { langFromParam, langForUiCopy, type UiLang } from "@/lib/i18n-lang";
@@ -254,11 +255,7 @@ export default function TransporteLandingPage({
   const lang = langForUiCopy(langFromParam(searchParams?.lang));
   const t = COPY[lang];
   const menu = taxiRideShareStarterMenu();
-  const usdFmt = new Intl.NumberFormat(lang === "es" ? "es-US" : "en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
+  const fmtPrice = (cents: number) => formatUsdCents(cents, lang);
   const otherLang: UiLang = lang === "es" ? "en" : "es";
 
   const signupHref = `/unete?service=${TRANSPORT_APP_SERVICE}&lang=${lang}`;
@@ -397,7 +394,7 @@ export default function TransporteLandingPage({
                     {(lang === "en" && it.name_en) || it.name_es}
                   </span>
                   <span className="text-[#78350F] font-bold tabular-nums shrink-0">
-                    {usdFmt.format(it.price_mxn_cents / 100)}
+                    {fmtPrice(it.price_mxn_cents)}
                   </span>
                 </li>
               ))}

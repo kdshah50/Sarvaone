@@ -1,6 +1,6 @@
-# AISaravanna (Next.js)
+# Sarvaone (Next.js)
 
-US-first marketplace web app (Next.js 14 App Router): **English by default**, **Spanish** via `?lang=es` or the header toggle. This document still covers **WhatsApp OTP**, **Supabase**, **Twilio**, and **deployment**.
+US-first AI-augmented marketplace (**Sarvaone**, formerly AISaravanna). Production: **https://sarvaone.com**. English by default, Spanish via `?lang=es` or the header toggle.
 
 ## WhatsApp OTP authentication (high level)
 
@@ -17,7 +17,7 @@ Copy `.env.example` to `.env.local` for local development.
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes | **AISaravanna-only** Supabase project URL (must match where you run SQL migrations). |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | **Sarvaone-dedicated** Supabase project URL (must match where you run SQL migrations). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | **Service role** key from that same project (not `anon`). Used by OTP routes and `/api/auth/me`. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | For other pages | **Anon** key from that same project (client-side Supabase where used). |
 | `JWT_SECRET` | Strongly recommended in production | Secret for signing/verifying `tianguis_token` JWT. Must stay stable across deploys. |

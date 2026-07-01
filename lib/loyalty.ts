@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 
 // 1 loyalty point per $1 USD of commission paid (amounts stored in cents)
+/** @deprecated Legacy name — one loyalty point per $1 USD of platform fee. */
 export const POINTS_PER_MXN = 1;
 
 // Every 5th booking = 15% discount

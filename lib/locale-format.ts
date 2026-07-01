@@ -1,8 +1,9 @@
 import type { Lang } from "@/lib/i18n-lang";
+import { formatUsdCents } from "@/lib/money";
 
-/** BCP 47 locale for Intl formatters (dates, times, numbers) */
+/** BCP 47 locale for Intl date/time formatters */
 export function intlLocaleForLang(lang: Lang): string {
-  return lang === "en" ? "en-MX" : "es-MX";
+  return lang === "en" ? "en-US" : "es-US";
 }
 
 export function formatDateTimeShort(iso: string, lang: Lang): string {
@@ -39,10 +40,12 @@ export function formatConversationDayLabel(iso: string, lang: Lang): string {
   return formatDateMedium(iso, lang);
 }
 
-export function formatCurrencyMXN(centavos: number, lang: Lang): string {
-  return new Intl.NumberFormat(intlLocaleForLang(lang), {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 0,
-  }).format(centavos / 100);
+/** Format stored USD cents for display (legacy DB fields may say `*_mxn_*`). */
+export function formatCurrencyUSD(cents: number, lang: Lang): string {
+  return formatUsdCents(cents, lang);
+}
+
+/** @deprecated Use formatCurrencyUSD — amounts are USD cents, not MXN. */
+export function formatCurrencyMXN(cents: number, lang: Lang): string {
+  return formatCurrencyUSD(cents, lang);
 }

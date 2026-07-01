@@ -7,6 +7,7 @@ import {
   PET_WALKING_SERVICE,
 } from "@/lib/provider-services";
 import { langFromParam, langForUiCopy, type UiLang } from "@/lib/i18n-lang";
+import { formatUsdCents } from "@/lib/money";
 
 const COPY: Record<
   UiLang,
@@ -215,11 +216,7 @@ export default function CuidadoMascotasLandingPage({
   const lang = langForUiCopy(langFromParam(searchParams?.lang));
   const t = COPY[lang];
   const menu = petCareLandingSampleMenu();
-  const peso = new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
+  const fmtPrice = (cents: number) => formatUsdCents(cents, lang);
   const otherLang: UiLang = lang === "es" ? "en" : "es";
 
   const walkHref = `/unete?service=${PET_WALKING_SERVICE}&lang=${lang}`;
@@ -347,7 +344,7 @@ export default function CuidadoMascotasLandingPage({
                     {(lang === "en" && it.name_en) || it.name_es}
                   </span>
                   <span className="text-[#78350F] font-bold tabular-nums shrink-0">
-                    {it.price_mxn_cents > 0 ? peso.format(it.price_mxn_cents / 100) : lang === "en" ? "Included" : "Incluido"}
+                    {it.price_mxn_cents > 0 ? fmtPrice(it.price_mxn_cents) : lang === "en" ? "Included" : "Incluido"}
                   </span>
                 </li>
               ))}

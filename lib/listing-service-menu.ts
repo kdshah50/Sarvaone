@@ -6,7 +6,7 @@
  * the menu, and the seller's chat panel offers a structured quote builder that
  * writes a total into the existing `listing_service_contact_gate.agreed_subtotal_mxn_cents`.
  *
- * Centavos everywhere (consistent with `listings.price_mxn` semantics).
+ * USD cents everywhere (legacy column/field names still say `*_mxn_*`).
  *
  * IMPORTANT: This module imposes no DB changes beyond the column added by
  * `supabase/migrations/20260518150000_listings_service_menu.sql`. All
@@ -15,9 +15,9 @@
 
 /** Max items in a single menu. Above this, sellers should split into multiple listings. */
 export const MAX_SERVICE_MENU_ITEMS = 60;
-/** Min price per item (centavos): 1 MXN. */
+/** Min price per item (USD cents): $1.00 */
 export const MIN_SERVICE_MENU_ITEM_CENTS = 100;
-/** Max price per item (centavos): 50,000 MXN — sanity bound. */
+/** Max price per item (USD cents): $50,000 — sanity bound. */
 export const MAX_SERVICE_MENU_ITEM_CENTS = 5_000_000;
 /** Max chars on item name (each language). */
 export const MAX_SERVICE_MENU_NAME_CHARS = 80;
@@ -68,7 +68,7 @@ export type ServiceMenuItem = {
 
 export type ServiceMenu = {
   version: 1;
-  currency: "MXN";
+  currency: "USD";
   items: ServiceMenuItem[];
   disclaimer_es?: string | null;
   disclaimer_en?: string | null;
@@ -94,9 +94,9 @@ function slugifyName(input: string, fallback: string): string {
  * Normalize and validate a service menu coming from the API, the database, or
  * the SellModal client form. Returns a clean, deduped menu or an error string.
  *
- * Accepts both centavos (`price_mxn_cents`) and pesos (`price_mxn`) on input
- * — the latter exists so the SellModal can pass user-typed pesos directly
- * without a conversion step. Output is always centavos.
+ * Accepts both USD cents (`price_mxn_cents`) and whole dollars (`price_mxn`) on input
+ * — the latter exists so the SellModal can pass user-typed dollars directly
+ * without a conversion step. Output is always USD cents.
  */
 export function parseServiceMenu(input: unknown): ParsedServiceMenu {
   if (input == null) return { ok: true, menu: emptyMenu() };
@@ -146,7 +146,7 @@ export function parseServiceMenu(input: unknown): ParsedServiceMenu {
         ? name_en_raw.trim().slice(0, MAX_SERVICE_MENU_NAME_CHARS)
         : null;
 
-    // Accept either centavos (canonical) or pesos (convenience for the form).
+    // Accept either USD cents (canonical) or whole dollars (convenience for the form).
     let cents: number | null = null;
     if (row.price_mxn_cents != null) {
       cents = Math.round(Number(row.price_mxn_cents));
@@ -159,13 +159,13 @@ export function parseServiceMenu(input: unknown): ParsedServiceMenu {
     if (cents < MIN_SERVICE_MENU_ITEM_CENTS) {
       return {
         ok: false,
-        error: `Fila ${i + 1}: precio mínimo $${MIN_SERVICE_MENU_ITEM_CENTS / 100} MXN`,
+        error: `Fila ${i + 1}: precio mínimo $${MIN_SERVICE_MENU_ITEM_CENTS / 100} USD`,
       };
     }
     if (cents > MAX_SERVICE_MENU_ITEM_CENTS) {
       return {
         ok: false,
-        error: `Fila ${i + 1}: precio máximo $${(MAX_SERVICE_MENU_ITEM_CENTS / 100).toLocaleString("es-MX")} MXN`,
+        error: `Fila ${i + 1}: precio máximo $${(MAX_SERVICE_MENU_ITEM_CENTS / 100).toLocaleString("en-US")} USD`,
       };
     }
 
@@ -193,7 +193,7 @@ export function parseServiceMenu(input: unknown): ParsedServiceMenu {
     ok: true,
     menu: {
       version: 1,
-      currency: "MXN",
+      currency: "USD",
       items,
       disclaimer_es,
       disclaimer_en,
@@ -211,7 +211,7 @@ function pickDisclaimer(input: unknown, fallback: string): string {
 export function emptyMenu(): ServiceMenu {
   return {
     version: 1,
-    currency: "MXN",
+    currency: "USD",
     items: [],
     disclaimer_es: DEFAULT_INSPECTION_DISCLAIMER_ES,
     disclaimer_en: DEFAULT_INSPECTION_DISCLAIMER_EN,
@@ -371,7 +371,7 @@ export function serviceMenuPayloadFromFormRows(
   if (cleaned.length === 0) {
     return {
       version: 1,
-      currency: "MXN",
+      currency: "USD",
       items: [],
       ...disclaimers,
     };
@@ -526,7 +526,7 @@ export function tailoringStarterMenu(): ServiceMenu {
   ];
   return {
     version: 1,
-    currency: "MXN",
+    currency: "USD",
     items,
     disclaimer_es: DEFAULT_INSPECTION_DISCLAIMER_ES,
     disclaimer_en: DEFAULT_INSPECTION_DISCLAIMER_EN,
@@ -582,7 +582,7 @@ export function veterinaryStarterMenu(): ServiceMenu {
   ];
   return {
     version: 1,
-    currency: "MXN",
+    currency: "USD",
     items,
     disclaimer_es: DEFAULT_VET_DISCLAIMER_SPANISH,
     disclaimer_en: DEFAULT_VET_DISCLAIMER_EN,
@@ -638,7 +638,7 @@ export function housekeepingStarterMenu(): ServiceMenu {
   ];
   return {
     version: 1,
-    currency: "MXN",
+    currency: "USD",
     items,
     disclaimer_es: DEFAULT_HOUSEKEEPING_DISCLAIMER_ES,
     disclaimer_en: DEFAULT_HOUSEKEEPING_DISCLAIMER_EN,
@@ -663,7 +663,7 @@ export function dogWalkingStarterMenu(): ServiceMenu {
   ];
   return {
     version: 1,
-    currency: "MXN",
+    currency: "USD",
     items,
     disclaimer_es: DEFAULT_PET_WALKING_DISCLAIMER_ES,
     disclaimer_en: DEFAULT_PET_WALKING_DISCLAIMER_EN,
@@ -688,7 +688,7 @@ export function petSittingStarterMenu(): ServiceMenu {
   ];
   return {
     version: 1,
-    currency: "MXN",
+    currency: "USD",
     items,
     disclaimer_es: DEFAULT_PET_SITTING_DISCLAIMER_ES,
     disclaimer_en: DEFAULT_PET_SITTING_DISCLAIMER_EN,
@@ -783,7 +783,7 @@ export function dogGroomingStarterMenu(): ServiceMenu {
   ];
   return {
     version: 1,
-    currency: "MXN",
+    currency: "USD",
     items,
     disclaimer_es: DEFAULT_DOG_GROOMING_DISCLAIMER_ES,
     disclaimer_en: DEFAULT_DOG_GROOMING_DISCLAIMER_EN,
@@ -862,7 +862,7 @@ export function taxiRideShareStarterMenu(): ServiceMenu {
   ];
   return {
     version: 1,
-    currency: "MXN",
+    currency: "USD",
     items,
     disclaimer_es: DEFAULT_TAXI_RIDE_DISCLAIMER_ES,
     disclaimer_en: DEFAULT_TAXI_RIDE_DISCLAIMER_EN,
@@ -876,7 +876,7 @@ export function petCareLandingSampleMenu(): ServiceMenu {
   const groom = dogGroomingStarterMenu().items.slice(0, 4);
   return {
     version: 1,
-    currency: "MXN",
+    currency: "USD",
     items: [...walk, ...sit, ...groom],
     disclaimer_es: DEFAULT_PET_SITTING_DISCLAIMER_ES,
     disclaimer_en: DEFAULT_PET_SITTING_DISCLAIMER_EN,

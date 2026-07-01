@@ -3,6 +3,7 @@ import Link from "next/link";
 import { veterinaryStarterMenu } from "@/lib/listing-service-menu";
 import { VETERINARY_SERVICE } from "@/lib/provider-services";
 import { langFromParam, langForUiCopy, type UiLang } from "@/lib/i18n-lang";
+import { formatUsdCents } from "@/lib/money";
 
 const COPY: Record<
   UiLang,
@@ -194,11 +195,7 @@ export default function VeterinariaLandingPage({
   const lang = langForUiCopy(langFromParam(searchParams?.lang));
   const t = COPY[lang];
   const menu = veterinaryStarterMenu();
-  const peso = new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
+  const fmtPrice = (cents: number) => formatUsdCents(cents, lang);
   const otherLang: UiLang = lang === "es" ? "en" : "es";
 
   const signupHref = `/unete?service=${VETERINARY_SERVICE}&lang=${lang}`;
@@ -325,7 +322,7 @@ export default function VeterinariaLandingPage({
                     {(lang === "en" && it.name_en) || it.name_es}
                   </span>
                   <span className="text-[#065F46] font-bold tabular-nums shrink-0">
-                    {peso.format(it.price_mxn_cents / 100)}
+                    {fmtPrice(it.price_mxn_cents)}
                   </span>
                 </li>
               ))}

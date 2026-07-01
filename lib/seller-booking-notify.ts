@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { idMatchVariantsForIn } from "@/lib/user-id-variants";
 import { expandUserAccountIdPool } from "@/lib/user-account-pool";
 import { sendWhatsAppToE164Digits } from "@/lib/twilio";
+import { formatUsdCents } from "@/lib/money";
 import { getPublicAppUrl } from "@/lib/app-url";
 import { phoneDigitsForAccountPool } from "@/lib/user-phone-notify";
 import { e164DigitsForWhatsAppRecipient } from "@/lib/phone";
@@ -118,7 +119,7 @@ export async function notifySellerBookingCommissionPaid(supabase: SupabaseClient
       return;
     }
 
-    const mxn = Math.round((row.commission_amount_cents ?? 0) / 100);
+    const feeFmt = formatUsdCents(row.commission_amount_cents ?? 0, "es");
     const appUrl = getPublicAppUrl();
     const convId = await findListingConversationIdForBuyer(
       supabase,
@@ -131,13 +132,13 @@ export async function notifySellerBookingCommissionPaid(supabase: SupabaseClient
       : `${appUrl}/seller-bookings`;
 
     const msg = [
-      `🎉 *Pago recibido en Naranjogo*`,
+      `🎉 *Pago recibido en AISaravanna*`,
       ``,
       `Un cliente pagó la tarifa de servicio/contacto por:`,
       `*${listingTitle}*`,
       ``,
       `Cliente: ${buyerName}`,
-      `Tarifa plataforma: ~$${mxn.toLocaleString("es-MX")} MXN`,
+      `Tarifa plataforma: ~${feeFmt}`,
       ticketCode ? `Ticket cliente: *${ticketCode}*` : `ID interno: ${row.id}`,
       ``,
       `Gestiona la reserva (agendado → en curso → completado):`,

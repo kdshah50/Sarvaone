@@ -13,6 +13,7 @@ import {
   parseQuoteMetadata,
   type ServiceQuoteLineItem,
 } from "@/lib/service-quote";
+import { formatUsdCents } from "@/lib/money";
 import {
   insertListingChatMessage,
   loadServiceQuoteGate,
@@ -96,8 +97,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!messageBody) {
       messageBody =
         lang === "en"
-          ? `📋 Official quote: ${(agreedSubtotalMxnCents / 100).toLocaleString("en-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 })}. Open the app to Accept or Decline.`
-          : `📋 Cotización oficial: ${(agreedSubtotalMxnCents / 100).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 })}. Abre la app para Aceptar o Rechazar.`;
+          ? `📋 Official quote: ${formatUsdCents(agreedSubtotalMxnCents, "en")}. Open the app to Accept or Decline.`
+          : `📋 Cotización oficial: ${formatUsdCents(agreedSubtotalMxnCents, "es")}. Abre la app para Aceptar o Rechazar.`;
     }
 
     const now = new Date().toISOString();

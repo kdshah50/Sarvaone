@@ -24,6 +24,7 @@ import {
   type ChatPollMessage,
 } from "@/lib/listing-chat-poll";
 import { listingChatCopy, formatListingChatSystemBody } from "@/lib/listing-chat-copy";
+import { formatUsdCents } from "@/lib/money";
 import { withLang } from "@/lib/i18n-lang";
 import {
   conversationDayKey,
@@ -94,7 +95,7 @@ export default function ListingChat({
   const [messages, setMessages] = useState<Msg[]>([]);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  /** Seller: agreed job total in MXN (pesos) for selected buyer — loaded/saved via API (stored as centavos). */
+  /** Seller: agreed job total in USD (dollars) for selected buyer — loaded/saved via API (stored as cents). */
   const [agreedPesos, setAgreedPesos] = useState("");
   const [agreedLoading, setAgreedLoading] = useState(false);
   const [agreedSaving, setAgreedSaving] = useState(false);
@@ -945,7 +946,7 @@ export default function ListingChat({
         : { buyerId: agreedPriceBuyerId, agreedSubtotalMxnCents: cents };
       if (!clear) {
         if (!Number.isFinite(pesos) || cents < 100) {
-          throw new Error(lang === "en" ? "Enter a valid amount (at least $1 MXN)." : c.invalidAmount);
+          throw new Error(lang === "en" ? "Enter a valid amount (at least $1 USD)." : c.invalidAmount);
         }
       }
       const r = await fetch(`/api/listings/${encodeURIComponent(listingId)}/service-booking/agreed-price`, {
@@ -1157,7 +1158,7 @@ export default function ListingChat({
               <p className="text-[#92400E] leading-snug">{c.agreedHelp}</p>
               <div className="flex flex-wrap items-end gap-2">
                 <label className="flex-1 min-w-[120px]">
-                  <span className="sr-only">MXN</span>
+                  <span className="sr-only">USD</span>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -1301,11 +1302,7 @@ export default function ListingChat({
           {quoteAgreedCents != null && quoteAgreedCents > 0 ? (
             <p className="text-[#92400E] mt-1">
               {lang === "en" ? "Total" : c.total}:{" "}
-              {new Intl.NumberFormat(lang === "en" ? "en-MX" : "es-MX", {
-                style: "currency",
-                currency: "MXN",
-                maximumFractionDigits: 0,
-              }).format(quoteAgreedCents / 100)}
+              {formatUsdCents(quoteAgreedCents, lang)}
             </p>
           ) : null}
           {quoteStatus === "declined" ? (

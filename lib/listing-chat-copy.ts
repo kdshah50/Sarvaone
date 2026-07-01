@@ -22,13 +22,13 @@ export const LISTING_CHAT_COPY = {
     chatWith: "Chateando con",
     agreedTitle: "Precio acordado del trabajo (este comprador)",
     agreedHelp:
-      "Opcional: total del trabajo en MXN (si no lo pones, se usa el precio del anuncio o paquete). El comprador paga la tarifa de Naranjogo sobre este monto, o puede pagar el servicio completo en la app si activaste cobros con Stripe.",
+      "Opcional: total del trabajo en USD (si no lo pones, se usa el precio del anuncio o paquete). El comprador paga la tarifa de la plataforma sobre este monto, o puede pagar el servicio completo en la app si activaste cobros con Stripe.",
     agreedPh: "ej. 850",
     agreedSave: "Guardar",
     agreedClear: "Quitar",
     agreedLoading: "Cargando precio acordado…",
     loadingThread: "Cargando conversación…",
-    invalidAmount: "Monto inválido (mín. $1 MXN).",
+    invalidAmount: "Monto inválido (mín. $1 USD).",
     requestSent:
       "✓ Solicitud enviada — esperando la cotización oficial del proveedor. Verás Aceptar / Rechazar aquí cuando la envíe.",
     rebookLead:
@@ -77,13 +77,13 @@ export const LISTING_CHAT_COPY = {
     chatWith: "Chat with",
     agreedTitle: "Agreed job total (this buyer)",
     agreedHelp:
-      "Optional: total for this job in MXN (same base as listing/package unless you set this). Buyer pays the platform fee on this amount, or can pay the full service in-app if you have Stripe payouts.",
+      "Optional: total for this job in USD (same base as listing/package unless you set this). Buyer pays the platform fee on this amount, or can pay the full service in-app if you have Stripe payouts.",
     agreedPh: "e.g. 850",
     agreedSave: "Save",
     agreedClear: "Clear",
     agreedLoading: "Loading agreed total…",
     loadingThread: "Loading thread…",
-    invalidAmount: "Enter a valid amount (at least $1 MXN).",
+    invalidAmount: "Enter a valid amount (at least $1 USD).",
     requestSent:
       "✓ Request sent — waiting for your provider’s official quote. You’ll get Accept / Decline buttons here when they send it.",
     rebookLead:

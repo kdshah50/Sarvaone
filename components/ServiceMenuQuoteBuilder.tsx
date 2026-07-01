@@ -29,6 +29,7 @@ import {
   serviceAddressLabel,
 } from "@/lib/service-quote-vertical";
 import { TRANSPORT_APP_SERVICE } from "@/lib/provider-services";
+import { formatUsdCents } from "@/lib/money";
 
 export type QuoteBuilderPayload = {
   totalCents: number;
@@ -185,11 +186,7 @@ export default function ServiceMenuQuoteBuilder({
     return null;
   }
 
-  const formatter = new Intl.NumberFormat(lang === "en" ? "en-MX" : "es-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 0,
-  });
+  const fmt = (cents: number) => formatUsdCents(cents, lang);
 
   const change = (sku: string, delta: number, alsoSetSku?: string) => {
     setQtyBySku((prev) => {
@@ -346,7 +343,7 @@ export default function ServiceMenuQuoteBuilder({
     if (!onInsertAsMessage || selectedLines.length === 0) return;
     const lines = selectedLines.map(({ it, qty }) => {
       const label = (lang === "en" && it.name_en) || it.name_es;
-      const lineTotal = formatter.format((it.price_mxn_cents * qty) / 100);
+      const lineTotal = fmt(it.price_mxn_cents * qty);
       return `• ${qty}× ${label} — ${lineTotal}`;
     });
     const freqRow = HOUSEKEEPING_VISIT_FREQUENCIES.find((f) => f.id === visitFrequency);
@@ -375,11 +372,11 @@ export default function ServiceMenuQuoteBuilder({
     const totalLine =
       quoteLayout === "housekeeping" && housekeepingTotals && isRecurring
         ? lang === "en"
-          ? `Per visit: ${formatter.format(housekeepingTotals.perVisitCents / 100)} · Monthly package (${housekeepingTotals.visitsPerMonth} visits): ${formatter.format(housekeepingTotals.monthlyPackageCents / 100)} · Applied: ${formatter.format(totalCents / 100)}`
-          : `Por visita: ${formatter.format(housekeepingTotals.perVisitCents / 100)} · Paquete mensual (${housekeepingTotals.visitsPerMonth} visitas): ${formatter.format(housekeepingTotals.monthlyPackageCents / 100)} · Aplicado: ${formatter.format(totalCents / 100)}`
+          ? `Per visit: ${fmt(housekeepingTotals.perVisitCents)} · Monthly package (${housekeepingTotals.visitsPerMonth} visits): ${fmt(housekeepingTotals.monthlyPackageCents)} · Applied: ${fmt(totalCents)}`
+          : `Por visita: ${fmt(housekeepingTotals.perVisitCents)} · Paquete mensual (${housekeepingTotals.visitsPerMonth} visitas): ${fmt(housekeepingTotals.monthlyPackageCents)} · Aplicado: ${fmt(totalCents)}`
         : lang === "en"
-          ? `Subtotal: ${formatter.format(totalCents / 100)}`
-          : `Subtotal: ${formatter.format(totalCents / 100)}`;
+          ? `Subtotal: ${fmt(totalCents)}`
+          : `Subtotal: ${fmt(totalCents)}`;
     const disclaimer = (lang === "en" ? menu.disclaimer_en : menu.disclaimer_es) ?? "";
     const body = [header, freqLine, basisLine, ...lines, "", totalLine, disclaimer]
       .filter((s) => s !== null && s !== undefined && String(s).length > 0)
@@ -587,7 +584,7 @@ export default function ServiceMenuQuoteBuilder({
                 <span className="min-w-0 flex-1 text-[#1C1917]">{label}</span>
                 {item ? (
                   <span className="shrink-0 text-[#6B7280]">
-                    {formatter.format(item.price_mxn_cents / 100)}
+                    {fmt(item.price_mxn_cents)}
                   </span>
                 ) : null}
                 <div className="flex items-center gap-1 shrink-0">
@@ -644,7 +641,7 @@ export default function ServiceMenuQuoteBuilder({
                   {lang === "en" ? "Per visit" : "Por visita"}
                 </span>
                 <span className="font-semibold text-[#78350F]">
-                  {formatter.format(housekeepingTotals.perVisitCents / 100)}
+                  {fmt(housekeepingTotals.perVisitCents)}
                 </span>
               </div>
               {isRecurring && (
@@ -656,7 +653,7 @@ export default function ServiceMenuQuoteBuilder({
                         : `Paquete mensual (${housekeepingTotals.visitsPerMonth} visitas)`}
                     </span>
                     <span className="font-semibold text-[#78350F]">
-                      {formatter.format(housekeepingTotals.monthlyPackageCents / 100)}
+                      {fmt(housekeepingTotals.monthlyPackageCents)}
                     </span>
                   </div>
                   <fieldset className="space-y-1">
@@ -701,7 +698,7 @@ export default function ServiceMenuQuoteBuilder({
             <div key={it.sku} className="flex items-center gap-2 py-1.5 text-[11px]">
               <span className="min-w-0 flex-1 text-[#1C1917]">{label}</span>
               <span className="shrink-0 text-[#6B7280]">
-                {formatter.format(it.price_mxn_cents / 100)}
+                {fmt(it.price_mxn_cents)}
               </span>
               <div className="flex items-center gap-1 shrink-0">
                 <button
@@ -752,7 +749,7 @@ export default function ServiceMenuQuoteBuilder({
               : "Subtotal de la cotización"}
         </span>
         <span className="text-sm font-bold text-[#78350F]">
-          {formatter.format(totalCents / 100)}
+          {fmt(totalCents)}
         </span>
       </div>
       {variant === "buyer" && (

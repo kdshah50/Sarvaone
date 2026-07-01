@@ -3,6 +3,7 @@ import {
   DEFAULT_INSPECTION_DISCLAIMER_EN,
   DEFAULT_INSPECTION_DISCLAIMER_ES,
 } from "@/lib/listing-service-menu";
+import { formatUsdCents } from "@/lib/money";
 
 /**
  * Public, read-only rendering of a seller's service menu (e.g. tailoring).
@@ -21,11 +22,7 @@ export default function ServiceMenuPublic({
     return null;
   }
 
-  const formatter = new Intl.NumberFormat(lang === "en" ? "en-MX" : "es-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 0,
-  });
+  const formatter = (cents: number) => formatUsdCents(cents, lang);
 
   const heading = lang === "en" ? "Service menu" : "Menú de servicios";
   const subheading =
@@ -53,7 +50,7 @@ export default function ServiceMenuPublic({
             >
               <span className="min-w-0 flex-1 text-[#1C1917]">{label}</span>
               <span className="shrink-0 font-semibold text-[#1B4332]">
-                {formatter.format(item.price_mxn_cents / 100)}
+                {formatter(item.price_mxn_cents)}
               </span>
             </li>
           );

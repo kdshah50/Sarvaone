@@ -10,6 +10,7 @@ import { loadServiceQuoteGateForBuyerPool, insertListingChatMessage, resolveConv
 import { notifySellerQuoteResponded } from "@/lib/service-quote-notify";
 import { appendListingChatQuoteAcceptNotice } from "@/lib/payment-confirmed-chat";
 import { expandUserAccountIdPool, userIsListingSellerAccount } from "@/lib/user-account-pool";
+import { formatUsdCents } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -82,11 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "No se pudo registrar tu respuesta" }, { status: 500 });
     }
 
-    const totalFmt = (gate.agreedSubtotalMxnCents / 100).toLocaleString(lang === "en" ? "en-MX" : "es-MX", {
-      style: "currency",
-      currency: "MXN",
-      maximumFractionDigits: 0,
-    });
+    const totalFmt = formatUsdCents(gate.agreedSubtotalMxnCents, lang === "en" ? "en" : "es");
 
     const messageBody =
       action === "accept"
