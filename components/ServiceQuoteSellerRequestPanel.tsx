@@ -16,6 +16,9 @@ import {
   sellerRequestPanelTitle,
   type ServiceQuoteLayout,
 } from "@/lib/service-quote-vertical";
+import { TRANSPORT_APP_SERVICE } from "@/lib/provider-services";
+import { parseRideTripAddresses } from "@/lib/ride-trip-addresses";
+import RideTripStaticMap from "@/components/ride/RideTripStaticMap";
 
 type Props = {
   lineItems: ServiceQuoteLineItem[];
@@ -53,6 +56,8 @@ export default function ServiceQuoteSellerRequestPanel({
     ? HOUSEKEEPING_VISIT_FREQUENCIES.find((f) => f.id === metadata.visitFrequency)
     : null;
   const contact = buyerContactFromMetadata(metadata);
+  const tripAddresses =
+    providerSlug === TRANSPORT_APP_SERVICE ? parseRideTripAddresses(metadata, contact?.serviceAddress) : null;
 
   const totalCents = computeQuoteTotalCents({
     menu,
@@ -91,6 +96,9 @@ export default function ServiceQuoteSellerRequestPanel({
             {preferredDatetimeLabel(providerSlug, lang)}: {formatPreferredAt(contact.preferredAt, lang)}
           </p>
         </div>
+      ) : null}
+      {tripAddresses ? (
+        <RideTripStaticMap pickup={tripAddresses.pickup} dropoff={tripAddresses.dropoff} lang={lang} />
       ) : null}
       {freq ? (
         <p className="text-[11px] text-[#047857]">

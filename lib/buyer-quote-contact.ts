@@ -11,6 +11,9 @@ export type BuyerQuoteContact = {
   contactPhone: string;
   whatsappPhone: string | null;
   serviceAddress: string;
+  /** Taxi — optional structured endpoints (also embedded in serviceAddress). */
+  pickupAddress?: string | null;
+  dropoffAddress?: string | null;
   /** ISO 8601 datetime for preferred visit */
   preferredAt: string;
 };
@@ -123,6 +126,8 @@ export function metadataFromBuyerContact(c: BuyerQuoteContact): Pick<
   | "contactPhone"
   | "whatsappPhone"
   | "serviceAddress"
+  | "pickupAddress"
+  | "dropoffAddress"
   | "preferredAt"
 > {
   return {
@@ -131,6 +136,8 @@ export function metadataFromBuyerContact(c: BuyerQuoteContact): Pick<
     contactPhone: c.contactPhone,
     whatsappPhone: c.whatsappPhone,
     serviceAddress: c.serviceAddress,
+    pickupAddress: c.pickupAddress?.trim() || undefined,
+    dropoffAddress: c.dropoffAddress?.trim() || undefined,
     preferredAt: c.preferredAt,
   };
 }
@@ -165,7 +172,9 @@ export function formatBuyerContactBlock(c: BuyerQuoteContact, lang: "es" | "en" 
     `${es ? "Nombre" : "Name"}: ${c.firstName} ${c.lastName}`,
     `${es ? "Teléfono" : "Phone"}: ${formatPhoneDisplay(c.contactPhone)}`,
     wa ? `${es ? "WhatsApp" : "WhatsApp"}: ${wa}` : null,
-    `${es ? "Dirección del servicio" : "Service address"}: ${c.serviceAddress}`,
+    c.pickupAddress && c.dropoffAddress
+      ? `${es ? "Origen" : "Pickup"}: ${c.pickupAddress}\n${es ? "Destino" : "Drop-off"}: ${c.dropoffAddress}`
+      : `${es ? "Dirección del servicio" : "Service address"}: ${c.serviceAddress}`,
     `${es ? "Día y hora preferidos" : "Preferred day & time"}: ${formatPreferredAt(c.preferredAt, lang)}`,
   ]
     .filter(Boolean)

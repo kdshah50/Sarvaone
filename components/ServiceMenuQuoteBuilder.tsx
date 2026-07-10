@@ -243,6 +243,8 @@ export default function ServiceMenuQuoteBuilder({
       contactPhone: contactPhone.trim(),
       whatsappPhone: whatsappDifferent && whatsappPhone.trim() ? whatsappPhone.trim() : null,
       serviceAddress: address,
+      pickupAddress: isTransportCustomRequest ? pickupAddress.trim() : null,
+      dropoffAddress: isTransportCustomRequest ? dropoffAddress.trim() : null,
       preferredAt,
     };
   };

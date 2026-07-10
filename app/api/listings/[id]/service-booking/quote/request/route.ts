@@ -7,7 +7,7 @@ import {
 import { buyerHasSentInAppMessage, ensureContactGateFromMessages } from "@/lib/contact-gate";
 import { inferProviderSlugFromListingTitle } from "@/lib/infer-listing-provider-slug";
 import { resolveListingServiceMenu } from "@/lib/listing-service-menu";
-import { providerServiceRequiresQuoteAccept } from "@/lib/provider-services";
+import { providerServiceRequiresQuoteAccept, TRANSPORT_APP_SERVICE } from "@/lib/provider-services";
 import {
   buildMenuQuoteMessage,
   computeQuoteTotalCents,
@@ -30,6 +30,8 @@ import {
 import { notifySellerBuyerServiceRequest, notifyBuyerServiceRequestSent } from "@/lib/service-quote-notify";
 import { quoteLayoutForSlug } from "@/lib/service-quote-vertical";
 import { expandUserAccountIdPool, userIsListingSellerAccount } from "@/lib/user-account-pool";
+import { geocodeUsAddress } from "@/lib/geocode-us-address";
+import { notifyNearbyDriversForRideRequest } from "@/lib/ride-nearby-drivers";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const supabase = createAdminSupabase();
     const { data: listing, error: le } = await supabase
       .from("listings")
-      .select("id,seller_id,title_es,service_menu,status")
+      .select("id,seller_id,title_es,service_menu,status,location_lat,location_lng")
       .eq("id", listingId)
       .maybeSingle();
     if (le || !listing?.seller_id) {
@@ -227,6 +229,38 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       });
     } catch (e) {
       console.error("[service-quote/request] buyer WhatsApp failed (non-fatal)", e);
+    }
+
+    if (slug === TRANSPORT_APP_SERVICE) {
+      try {
+        const pickupText =
+          buyerContact.pickupAddress?.trim() ||
+          buyerContact.serviceAddress.split("\n")[0]?.replace(/^Origen:\s*/i, "").trim() ||
+          buyerContact.serviceAddress.slice(0, 120);
+        let refLat = Number(listing.location_lat);
+        let refLng = Number(listing.location_lng);
+        if (!Number.isFinite(refLat) || !Number.isFinite(refLng)) {
+          const geo = await geocodeUsAddress(pickupText);
+          if (geo) {
+            refLat = geo.lat;
+            refLng = geo.lng;
+          }
+        }
+        if (Number.isFinite(refLat) && Number.isFinite(refLng)) {
+          await notifyNearbyDriversForRideRequest({
+            supabase,
+            originListingId: listingId,
+            originSellerId: String(listing.seller_id),
+            refLat,
+            refLng,
+            buyerName: `${buyerContact.firstName} ${buyerContact.lastName}`.trim(),
+            pickupSummary: pickupText,
+            lang,
+          });
+        }
+      } catch (e) {
+        console.error("[service-quote/request] nearby drivers notify failed (non-fatal)", e);
+      }
     }
 
     return NextResponse.json({

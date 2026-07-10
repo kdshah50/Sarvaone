@@ -10,6 +10,8 @@ import { useCommunityLane } from "@/components/CommunityLaneContext";
 import { clampLangForLane } from "@/lib/lang-for-lane";
 import { hrefWithLang, langFromParam, type Lang, listingHref } from "@/lib/i18n-lang";
 import { UsdCents } from "@/components/UsdAmount";
+import BuyerDriverEnRouteCard from "@/components/ride/BuyerDriverEnRouteCard";
+import { isTransportListingTitle } from "@/lib/ride-trip-addresses";
 
 type Booking = {
   id: string;
@@ -24,6 +26,8 @@ type Booking = {
   package_session_count?: number | null;
   listing_title: string;
   seller_name: string;
+  driver_en_route_at?: string | null;
+  driver_location_maps_url?: string | null;
 };
 
 type ReminderRow = {
@@ -447,6 +451,14 @@ function MyBookingsPageInner() {
                       <p className="text-[10px] text-[#9CA3AF]">{ago}</p>
                     </div>
                   </div>
+
+                  {isTransportListingTitle(b.listing_title) && (
+                    <BuyerDriverEnRouteCard
+                      lang={lang}
+                      driverEnRouteAt={b.driver_en_route_at}
+                      mapsUrl={b.driver_location_maps_url}
+                    />
+                  )}
 
                   <div className="flex flex-wrap gap-2">
                     <Link

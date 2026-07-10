@@ -33,6 +33,10 @@ export type ServiceQuoteMetadata = {
   contactPhone?: string;
   whatsappPhone?: string | null;
   serviceAddress?: string;
+  /** Taxi custom trip — structured pickup (also stored in serviceAddress for legacy readers). */
+  pickupAddress?: string;
+  /** Taxi custom trip — structured drop-off. */
+  dropoffAddress?: string;
   /** ISO datetime — preferred visit before quote */
   preferredAt?: string;
   /** Saved line items for rebook form prefill (cleared from gate row until buyer submits). */
@@ -92,6 +96,8 @@ export function parseQuoteMetadata(raw: unknown): ServiceQuoteMetadata | null {
   if (typeof o.whatsappPhone === "string") meta.whatsappPhone = o.whatsappPhone.trim() || null;
   if (o.whatsappPhone === null) meta.whatsappPhone = null;
   if (typeof o.serviceAddress === "string") meta.serviceAddress = o.serviceAddress.trim();
+  if (typeof o.pickupAddress === "string") meta.pickupAddress = o.pickupAddress.trim();
+  if (typeof o.dropoffAddress === "string") meta.dropoffAddress = o.dropoffAddress.trim();
   if (typeof o.preferredAt === "string") meta.preferredAt = o.preferredAt.trim();
   const prefill = parseQuoteLineItems(o.rebookPrefillLineItems);
   if (prefill?.length) meta.rebookPrefillLineItems = prefill;

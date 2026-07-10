@@ -9,6 +9,8 @@ import { clampLangForLane } from "@/lib/lang-for-lane";
 import { hrefWithLang, langFromParam, listingHref, type Lang } from "@/lib/i18n-lang";
 import { canTransitionLifecycle, type BookingLifecycleStatus } from "@/lib/booking-lifecycle";
 import { mergeBookingsListWithDetailTruth } from "@/lib/booking-client-detail-truth";
+import { isTransportListingTitle } from "@/lib/ride-trip-addresses";
+import DriverEnRouteButton from "@/components/ride/DriverEnRouteButton";
 
 type SellerBooking = {
   id: string;
@@ -21,6 +23,7 @@ type SellerBooking = {
   listing_chat_path?: string | null;
   appointment_at?: string | null;
   paid_at?: string | null;
+  driver_en_route_at?: string | null;
 };
 
 type SellerStats = {
@@ -298,6 +301,17 @@ function SellerBookingsPageInner() {
                       {t.listing}
                     </Link>
                   </div>
+
+                  {isTransportListingTitle(b.listing_title) &&
+                    !["completed", "cancelled"].includes(st) && (
+                      <div className="mb-3">
+                        <DriverEnRouteButton
+                          bookingId={b.id}
+                          lang={lang}
+                          alreadyEnRoute={Boolean(b.driver_en_route_at)}
+                        />
+                      </div>
+                    )}
 
                   {actions.length > 0 && (
                     <div className="border-t border-[#F4F0EB] pt-3 space-y-2">

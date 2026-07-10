@@ -110,6 +110,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       appointmentAt: booking.appointment_at ?? null,
       paidAt: booking.paid_at,
       createdAt: booking.created_at,
+      driverEnRouteAt: booking.driver_en_route_at ?? null,
+      driverLocationMapsUrl: booking.driver_location_maps_url ?? null,
       isBuyer,
       isSeller,
       listingChatPath,
